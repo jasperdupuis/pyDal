@@ -1,0 +1,1 @@
+These check scripts were written in the top directory, so copy pasta them to that level before trying to run.
