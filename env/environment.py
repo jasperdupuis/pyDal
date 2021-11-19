@@ -19,6 +19,8 @@ import haversine
 sys.path.insert(1,r'C:\Users\Jasper\Desktop\MASC\python-packages\pyat')
 import pyat.pyat.env
 
+# PyRAM includes
+from pyram.PyRAM import PyRAM
 
 def create_basis_common(bathy, #custom class in this file
                      rx_lat_lon_tuple,
@@ -84,7 +86,7 @@ class Environment():
         self.bottom_profile = r'not set'
         
     def set_bathymetry_common(self,p_bathymetry):
-        self.bathymetry= p_bathymetry
+        self.bathymetry = p_bathymetry
         
     def set_ssp_common(self,p_ssp):
         self.ssp = p_ssp
@@ -115,7 +117,132 @@ class Environment():
     
     def set_surface(self,surface):
         pass
+   
+    
+class Environment_RAM(Environment):
+    
+    def set_ssp(self,
+                ssp_drdc,
+                roughness = [0.5,0.5],
+                ssp_selection = 'Summer',
+                ssp_ranges = np.array([1]) # in m
+                ):   
+        """
+        """
+        self.set_ssp_common(ssp_drdc)
+        self.ssp_depths = ssp_drdc.depths
+        self.ssp_r = ssp_ranges
+        self.ssp_c = ssp_drdc.dict[ssp_selection]
+        self.ssp_c = np.reshape(self.ssp_c,
+                                (len(self.ssp_c),len(self.ssp_r))
+                                )
        
+        
+    def set_seabed(self,
+                   seabed_drdc):
+        """
+        Takes the arrays in seabed_drdc.bottom_type_profile and takes the first value
+        In the future may want to account for non-uniformity.
+        But, parameter studies by others 
+        indicate that isn't an issue compared to geometry and SSP
+        
+        """      
+        self.set_seabed_common(seabed_drdc)
+        self.seabed_rho = seabed_drdc.bottom_type_profile['Rho'][0][0]
+        self.seabed_c = seabed_drdc.bottom_type_profile['c'][0][0]        
+        self.seabed_alpha = seabed_drdc.bottom_type_profile['alpha'][0][0]
+
+    
+    def set_bathymetry(self,bathy):
+        self.set_bathymetry_common(bathy)
+    
+    def set_surface(self,surface):
+        self.set_surface_common(surface)
+    
+    def create_environment_model(self,
+                                 rx_lat_lon_tuple,
+                                 tx_lat_lon_tuple,
+                                 **kwargs):
+        """
+        Wrap the RAM code for generic environment.
+        Because it is poorly separated need to feed the other 
+        main inputs to this: ssp, source, bottom and surface objects.
+        
+        #Takes np.abs of the depth and distances, as model takes down to be positive.
+        """
+        self.freq = kwargs['FREQ_TO_RUN']
+        self.source_depth = kwargs['TX_DEPTH']    # in m
+        self.receiver_depth = kwargs['RX_DEPTH'] # in m
+        
+        #establishes the 2d slice bathymetry with range.
+        total_distance,self.distances,self.z_interped,self.depths = \
+            create_basis_common(
+                self.bathymetry,
+                rx_lat_lon_tuple,
+                tx_lat_lon_tuple,
+                kwargs['BASIS_SIZE_DEPTH'],
+                kwargs['BASIS_SIZE_DISTANCE'])
+            
+        self.z_interped = np.abs(self.z_interped)
+            
+        # zips two equal length 1D vectors
+        # add the .T argument at end to take transpose
+        # which makes for two columns instead of two rows.
+        self.bathy_2d_profile = np.vstack(
+            (self.distances,self.z_interped)).T
+        
+        self.sb_update_z = np.zeros(1)
+        self.sb_update_r = self.distances
+            
+        self.sb_rho_arr = self.seabed_rho * np.ones(len(self.distances))
+        self.sb_rho_arr = np.reshape(
+            self.sb_rho_arr,
+            (len(self.sb_update_z),len(self.sb_update_r)))
+        
+        self.sb_c_arr = self.seabed_c * np.ones(len(self.distances))
+        self.sb_c_arr = np.reshape(
+            self.sb_c_arr,
+            (len(self.sb_update_z),len(self.sb_update_r)))
+        
+        self.sb_alpha_arr = self.seabed_alpha * np.ones(len(self.distances))
+        self.sb_alpha_arr = np.reshape(
+            self.sb_alpha_arr,
+            (len(self.sb_update_z),len(self.sb_update_r)))
+
+
+        self.pyram_obj = PyRAM(
+            self.freq,
+            self.source_depth,
+            self.receiver_depth,
+            self.ssp_depths,
+            self.ssp_r,
+            self.ssp_c,
+            self.sb_update_z,
+            self.sb_update_r,
+            self.sb_c_arr,
+            self.sb_rho_arr,
+            self.sb_alpha_arr,
+            self.bathy_2d_profile
+            )
+        
+        return
+    
+    def run_model(self):
+        """
+        From PyRAM module:
+        results = {'ID': self._id,
+              'Proc Time': self.proc_time,
+              'Ranges': self.vr,
+              'Depths': self.vz,
+              'TL Grid': self.tlg,
+              'TL Line': self.tll,
+              'CP Grid': self.cpg,
+              'CP Line': self.cpl,
+              'c0': self._c0}
+        """
+        result = self.pyram_obj.run()
+        return result
+
     
 class Environment_PYAT(Environment):
     
@@ -196,8 +323,8 @@ class Environment_PYAT(Environment):
                 self.bathymetry,
                 rx_lat_lon_tuple,
                 tx_lat_lon_tuple,
-                kwargs['BASIS_SIZE_DEPTH'],
-                kwargs['BASIS_SIZE_DISTANCE'])
+                kwargs['BASIS_SIZE_depth'],
+                kwargs['BASIS_SIZE_distance'])
         self.Z = np.abs( self.depths )# in m
         self.X = np.abs( self.distances / 1000 )# in m converted to km
         self.s = pyat.pyat.env.Source(source_drdc.depth)
