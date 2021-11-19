@@ -10,3 +10,4 @@ from . import seabed
 from . import ssp
 from . import bathymetry
 from . import environment
+from . import locations

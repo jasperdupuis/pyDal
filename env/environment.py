@@ -20,6 +20,51 @@ sys.path.insert(1,r'C:\Users\Jasper\Desktop\MASC\python-packages\pyat')
 import pyat.pyat.env
 
 
+def create_basis_common(bathy, #custom class in this file
+                     rx_lat_lon_tuple,
+                     tx_lat_lon_tuple,
+                     BASIS_SIZE_depth,
+                     BASIS_SIZE_distance):
+        """
+        Create a basis 2D environment, depths and distances.
+        self.distances, self.z_interp in meters.
+        """
+        
+        # the basis needs to be arranged in increasing order, so some logic.
+        if rx_lat_lon_tuple[0] > tx_lat_lon_tuple[0]:
+            north_most = rx_lat_lon_tuple[0]
+            south_most = tx_lat_lon_tuple[0]
+        else:
+            north_most = tx_lat_lon_tuple[0]
+            south_most = rx_lat_lon_tuple[0]
+    
+        #Be careful of sign for lon: -180,180.
+        if rx_lat_lon_tuple[1] > tx_lat_lon_tuple[1]:
+            east_most = rx_lat_lon_tuple[1]
+            west_most = tx_lat_lon_tuple[1]
+        else:
+            east_most = tx_lat_lon_tuple[1]
+            west_most = rx_lat_lon_tuple[1]
+    
+        lat_basis = np.linspace(south_most,north_most,num=BASIS_SIZE_distance)
+        lon_basis = np.linspace(west_most,east_most,num=BASIS_SIZE_distance)
+        z_interped = bathy.calculate_interp_bathy(lat_basis,lon_basis)
+        
+        #Calculate the distance this environment spans, thi sis where meters is set
+        basis_min = (min(lat_basis),min(lon_basis))
+        basis_max = (max(lat_basis),max(lon_basis))
+        total_distance = distance.distance(
+            basis_min,
+            basis_max ).m
+        distances = np.arange(len(z_interped))
+        distances = distances * total_distance/(len(z_interped)-2)
+            
+        depths = np.abs(np.linspace(0,np.max(z_interped),BASIS_SIZE_depth))
+        
+        #distances in m, depths in m
+        return total_distance,distances, z_interped, depths    
+
+
 class Empty():
     def __init__(self):
         return
@@ -31,7 +76,7 @@ class Environment():
     but underlying environment will not change. Derived classes can implement
     methods for specific requirements.
     """
-    
+        
     def __init__(self):
         self.bathymetry = r'not set'
         self.ssp = r'not set'
@@ -49,53 +94,7 @@ class Environment():
     
     def set_surface_common(self,p_surface):
         self.surface = p_surface
- 
-    def create_basis_common(self,
-                     rx_lat_lon_tuple,
-                     tx_lat_lon_tuple,
-                     basis_size):
-        """
-        Create a basis 2D environment, depths and distances.
-        self.distances, self.z_interp in meters.
-        """
-        
-        # the basis needs to be arranged in increasing order, so some logic.
-        if rx_lat_lon_tuple[0] > tx_lat_lon_tuple[0]:
-            north_most = rx_lat_lon_tuple[0]
-            south_most = tx_lat_lon_tuple[0]
-        else:
-            north_most = tx_lat_lon_tuple[0]
-            south_most = rx_lat_lon_tuple[0]
 
-        #Be careful of sign for lon: -180,180.
-        if rx_lat_lon_tuple[1] > tx_lat_lon_tuple[1]:
-            east_most = rx_lat_lon_tuple[1]
-            west_most = tx_lat_lon_tuple[1]
-        else:
-            east_most = tx_lat_lon_tuple[1]
-            west_most = rx_lat_lon_tuple[1]
-
-        lat_basis = np.linspace(south_most,north_most,num=basis_size)
-        lon_basis = np.linspace(west_most,east_most,num=basis_size)
-        z_interped = self.bathymetry.calculate_interp_bathy(lat_basis,lon_basis)
-        
-        #Calculate the distance this environment spans, thi sis where meters is set
-        basis_min = (min(lat_basis),min(lon_basis))
-        basis_max = (max(lat_basis),max(lon_basis))
-        total_distance = distance.distance(
-            basis_min,
-            basis_max ).m
-        distances = np.arange(len(z_interped))
-        distances = distances * total_distance/(len(z_interped)-2)
-    
-        self.distances = distances #in m
-        self.z_interped = z_interped
-        
-        depths = np.linspace(0,np.max(z_interped),basis_size)
-        self.depth_linspace = depths
-        
-        return total_distance,distances, z_interped, depths
-    
     # Functions that derived classes must implement, even if only to call
     # the _common methods, above. 
     def create_environment_model(self,
@@ -192,12 +191,15 @@ class Environment_PYAT(Environment):
         """
         self.freq = kwargs['freq']
         self.beam = p_beam
-        total_distance,distances,z_interp,depths = self.create_basis_common(
-                    rx_lat_lon_tuple,
-                    tx_lat_lon_tuple,
-                    kwargs['BASIS_SIZE'])
-        self.Z = np.abs( depths )# in m
-        self.X = np.abs( distances / 1000 )# in m converted to km
+        total_distance,self.distances,self.z_interped,self.depths = \
+            create_basis_common(
+                self.bathymetry,
+                rx_lat_lon_tuple,
+                tx_lat_lon_tuple,
+                kwargs['BASIS_SIZE_DEPTH'],
+                kwargs['BASIS_SIZE_DISTANCE'])
+        self.Z = np.abs( self.depths )# in m
+        self.X = np.abs( self.distances / 1000 )# in m converted to km
         self.s = pyat.pyat.env.Source(source_drdc.depth)
         self.r = pyat.pyat.env.Dom(self.X, self.Z) #needs to be in km, m
         self.pos = pyat.pyat.env.Pos(self.s,self.r)
@@ -230,6 +232,7 @@ class Environment_ARL(Environment):
         """
         Creates an arlpy Acoustic Research Lab environment object.
         Note this depends on the linspace in main function having 50 entries.
+        # 20211118: Does the above line mean anything now??
         
         arguments:
             lat_basis
@@ -242,16 +245,19 @@ class Environment_ARL(Environment):
         """
         env = pm.create_env2d()        
         
-        total_distance,distances,z_interped,depths = self.create_basis_common(
-                        rx_lat_lon_tuple,
-                        tx_lat_lon_tuple,
-                        kwargs['BASIS_SIZE'])
+        total_distance,self.distances,self.z_interped,self.depths = \
+            create_basis_common(
+                self.bathymetry,
+                rx_lat_lon_tuple,
+                tx_lat_lon_tuple,
+                kwargs['BASIS_SIZE_DEPTH'],
+                kwargs['BASIS_SIZE_DISTANCE'])
              
         self.surface.SS_0(total_distance) #sea state 0, no params other than wave height.
         self.set_surface(self.surface)
         
         depth_array = []
-        for r,z in zip(distances,z_interped):
+        for r,z in zip(self.distances,self.z_interped):
             depth_array.append([r,np.abs(z)])
         depth_array = np.array(depth_array)
         
