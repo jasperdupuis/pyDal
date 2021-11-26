@@ -33,24 +33,27 @@ import env.comparison_setup
 import source
 import KRAKEN_functions
 
-DEG_OFFSET = 0.75 # Each location has a centre point, this defines the decimal degrees in each cardinal direction from that.
 # LOCATION = 'Emerald Basin'
 # LOCATION = 'Pat Bay'
 # LOCATION = 'Ferguson Cove'
 LOCATION = 'Pekeris Waveguide'
-the_location = Location(LOCATION,DEG_OFFSET) 
+the_location = Location(LOCATION) 
 
 # Parameters to manipulate
-FREQ = 500
-RX_HYD_DEPTH = 50 # m
-COURSE_distance = 5000 # m
+FREQ = 25
+RX_HYD_DEPTH = 100 # m
+TX_DEPTH = 100
 COURSE_heading = 1.99 #heading, cartesian not navigational angle.
-num_COURSE_POINTS = 5
+num_COURSE_POINTS = 25
+
+#Don't usually change these, but can.
 BASIS_SIZE_depth = 5000
 BASIS_SIZE_distance = 5000
+PEKERIS_DEPTH = 200
 N_BEAMS = 100 #this doesn't appear to matter - bellhop parameter
-PEKERIS_DEPTH = 100
 KRAKEN_ROUGHNESS = [0.1,0.1] # Doesn't change anything apparently
+RAM_DELTA_R = 25 # m, range step size
+RAM_DELTA_Z = 1 # m, depth step size, not currently used by me (Default is computed in pyram)
 
 #Results storage
 TL_RES_BELL = []
@@ -59,13 +62,14 @@ HYD_2_R = []
     
 THE_SOURCE, env_ARL, env_PYAT, env_RAM = env.comparison_setup.setup(
         the_location,
+        p_source_depth = TX_DEPTH,
           p_course_heading = COURSE_heading,
-          p_course_distance = COURSE_distance,
           p_course_num_points = num_COURSE_POINTS,
           p_pekeris_depths = PEKERIS_DEPTH,
           p_basis_size_depth = BASIS_SIZE_depth,
           p_basis_size_range = BASIS_SIZE_distance,
-          p_kraken_roughness = KRAKEN_ROUGHNESS          
+          p_kraken_roughness = KRAKEN_ROUGHNESS,
+          p_ram_delta_r = RAM_DELTA_R
           )
 
 #If needed
