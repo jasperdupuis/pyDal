@@ -44,7 +44,7 @@ FREQ = 25
 RX_HYD_DEPTH = 100 # m
 TX_DEPTH = 100
 COURSE_heading = 1.99 #heading, cartesian not navigational angle.
-num_COURSE_POINTS = 25
+num_COURSE_POINTS = 4
 
 #Don't usually change these, but can.
 BASIS_SIZE_depth = 5000
