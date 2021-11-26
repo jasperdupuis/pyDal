@@ -20,13 +20,14 @@ import source
 import KRAKEN_functions
 
 def setup(the_location,
+          p_source_depth = 4, #default for propeller center
           p_course_heading = 1.99,
-          p_course_distance = 5000,
           p_course_num_points = 50,
           p_pekeris_depths = 100,
           p_basis_size_depth = 5000,
           p_basis_size_range = 5000,
-          p_kraken_roughness = [0.5,0.5]          
+          p_kraken_roughness = [0.5,0.5],          
+          p_ram_delta_r = 50 # calculation range step, default in pyram is freq * num_pade_terms
           ):
           
     
@@ -35,26 +36,27 @@ def setup(the_location,
     bathymetry.sub_select_by_latlon(
         p_lat_extent_tuple = the_location.LAT_EXTENT_TUPLE,
         p_lon_extent_tuple = the_location.LON_EXTENT_TUPLE) #has default values for NS already
+    # If pekeris, set the depth uniformly over the space.
+    if the_location.location_title == 'Pekeris Waveguide':
+        #set the constant depth
+        bathymetry.z = p_pekeris_depths*np.ones_like(bathymetry.z)
+        bathymetry.z_selection= p_pekeris_depths * np.ones_like(bathymetry.z_selection)
     bathymetry.interpolate_bathy()
     
     
     # set source properties
     THE_SOURCE = source.Source()
     THE_SOURCE.set_name()
-    THE_SOURCE.set_depth() #Default is 4m
+    THE_SOURCE.set_depth(p_source_depth) #Default is 4m
     THE_SOURCE.set_speed()
     THE_SOURCE.generate_course((the_location.LAT,the_location.LON),
                             p_CPA_deviation_m = 0,
                             p_CPA_deviation_heading=haversine.Direction.EAST,
                             p_course_heading=p_course_heading*np.pi, #(0,2pi), mathematical not navigation angles
-                            p_distance= p_course_distance, # m
+                            p_distance= the_location.COURSE_DISTANCE, # m
                             p_divisions = p_course_num_points) #number of divisions
     
-    #get the 2D plane of the course
-    if the_location.location_title == 'Pekeris Waveguide':
-        #set the constant depth
-        bathymetry.z = p_pekeris_depths*np.ones_like(bathymetry.z)
-        bathymetry.z_selection= p_pekeris_depths * np.ones_like(bathymetry.z_selection)
+
     total_distance,distances, z_interped, depths = \
         create_basis_common(
             bathymetry,
@@ -65,6 +67,7 @@ def setup(the_location,
     
     # THIS IS KIND OF OUT OF ORDER, BUT NEED IT HERE FOR KOSHER SSP WITH KRAKEN
     MAX_LOCAL_DEPTH = np.abs(np.min(z_interped))
+    MAX_LOCAL_DEPTH +=1 # THIS IS A HACK TO MAKE SURE SSP EXTENDS PAST BOTTOM.
     
     ssp = SSP_Munk()
     ssp.set_depths(np.linspace(0,MAX_LOCAL_DEPTH,p_basis_size_depth))
@@ -91,5 +94,6 @@ def setup(the_location,
     env_RAM.set_bathymetry(bathymetry)
     env_RAM.set_seabed(bottom_profile)
     env_RAM.set_ssp(ssp)
+    env_RAM.set_calc_params(p_ram_delta_r)
 
     return THE_SOURCE, env_ARL, env_PYAT, env_RAM
