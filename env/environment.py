@@ -121,6 +121,10 @@ class Environment():
     
 class Environment_RAM(Environment):
     
+    def set_calc_params(self,
+                        dr):
+        self.DELTA_R_RAM = dr
+    
     def set_ssp(self,
                 ssp_drdc,
                 roughness = [0.5,0.5],
@@ -222,7 +226,8 @@ class Environment_RAM(Environment):
             self.sb_c_arr,
             self.sb_rho_arr,
             self.sb_alpha_arr,
-            self.bathy_2d_profile
+            self.bathy_2d_profile,
+            dr = self.DELTA_R_RAM
             )
         
         return
