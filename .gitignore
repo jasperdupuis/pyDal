@@ -1,3 +1,4 @@
+# My files to ignore
 
 py_env.env
 py_env.env
@@ -7,6 +8,8 @@ py_env.prt
 field.prt
 py_env.shd
 
+# My directories to ignore
+results/
 
 # THE BASIC PYTHON STUFF IS BELOW (TEMPLATED
 
