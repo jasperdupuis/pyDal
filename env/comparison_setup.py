@@ -27,7 +27,9 @@ def setup(the_location,
           p_basis_size_depth = 5000,
           p_basis_size_range = 5000,
           p_kraken_roughness = [0.5,0.5],          
-          p_ram_delta_r = 50 # calculation range step, default in pyram is freq * num_pade_terms
+          p_ram_delta_r = 50, # calculation range step, default in pyram is freq * num_pade_terms
+          p_depth_offset = 0, #in meters, positive
+          p_CPA_offset = 0 # in meters, positive.
           ):
           
     
@@ -41,6 +43,10 @@ def setup(the_location,
         #set the constant depth
         bathymetry.z = p_pekeris_depths*np.ones_like(bathymetry.z)
         bathymetry.z_selection= p_pekeris_depths * np.ones_like(bathymetry.z_selection)
+
+    #APPLY  DEPTH OFFSET - correct for over achieving curve fit and overly granular data
+    bathymetry.z_selection = bathymetry.z_selection - p_depth_offset # z negative ==> below sea level at this point.
+
     bathymetry.interpolate_bathy()
     
     
@@ -50,7 +56,7 @@ def setup(the_location,
     THE_SOURCE.set_depth(p_source_depth) #Default is 4m
     THE_SOURCE.set_speed()
     THE_SOURCE.generate_course((the_location.LAT,the_location.LON),
-                            p_CPA_deviation_m = 0,
+                            p_CPA_deviation_m = p_CPA_offset,
                             p_CPA_deviation_heading=haversine.Direction.EAST,
                             p_course_heading=p_course_heading*np.pi, #(0,2pi), mathematical not navigation angles
                             p_distance= the_location.COURSE_DISTANCE, # m
@@ -69,9 +75,20 @@ def setup(the_location,
     MAX_LOCAL_DEPTH = np.abs(np.min(z_interped))
     MAX_LOCAL_DEPTH +=1 # THIS IS A HACK TO MAKE SURE SSP EXTENDS PAST BOTTOM.
     
-    ssp = SSP_Munk()
-    ssp.set_depths(np.linspace(0,MAX_LOCAL_DEPTH,p_basis_size_depth))
-    ssp.read_profile(the_location.ssp_file)
+    if the_location.location_title =='Pekeris Waveguide':
+        ssp = SSP_Isovelocity()
+        ssp.set_depths(np.linspace(0,MAX_LOCAL_DEPTH,p_basis_size_depth))
+        ssp.read_profile(the_location.ssp_file)
+
+    if the_location.location_title =='Ferguson Cove, NS':
+        ssp = SSP_Blouin_2015()
+        ssp.set_depths(np.linspace(0,MAX_LOCAL_DEPTH,p_basis_size_depth))
+        ssp.read_profile(the_location.ssp_file)
+
+    if the_location.location_title =='Emerald Basin, NS':
+        ssp = SSP_Munk()
+        ssp.set_depths(np.linspace(0,MAX_LOCAL_DEPTH,p_basis_size_depth))
+        ssp.read_profile(the_location.ssp_file)
     
     bottom_profile = SeaBed(bathymetry)
     bottom_profile.read_default_dictionary()
