@@ -27,16 +27,6 @@ class SSP():
         return self.dict['Winter']
 
 
-class SSP_Isovelocity(SSP):
-    
-    def set_depths(self,p_depths):
-        self.depths = p_depths
-    
-    
-    def set_ssp(self,ssp):
-        c = np.ones_like(self.depths) * ssp
-        self.dict['Summer'] = c
-        self.dict['Winter'] = c
     
 class SSP_Blouin_2015(SSP):
     """
@@ -121,3 +111,25 @@ class SSP_Munk(SSP):
         z_tilde = 2 * (z - self.z_scale)/self.z_scale
         c = 1500 * (1 + self.epsilon*(z_tilde - 1 + np.exp(-z_tilde)))
         return c
+
+
+class SSP_Isovelocity(SSP):
+    """
+    Implement an isovelocity profile, 1500m/s
+ 
+    Must provide a depth vector.
+    """
+    
+    def set_depths(self,p_depths):
+        self.depths = p_depths
+    
+    def read_profile(self,fname='none_required'):
+        """
+        Hard coded isovelocity at 1500.
+        
+        Sets both Winter and Summer profiles to be the same.
+        """
+        c = np.ones_like(self.depths)
+        c = c * 1500.
+        self.dict['Summer'] = c
+        self.dict['Winter'] = c

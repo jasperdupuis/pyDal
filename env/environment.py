@@ -331,6 +331,7 @@ class Environment_PYAT(Environment):
                 kwargs['BASIS_SIZE_depth'],
                 kwargs['BASIS_SIZE_distance'])
         self.Z = np.abs( self.depths )# in m
+        # self.Z = np.abs( self.z_interped )# in m
         self.X = np.abs( self.distances / 1000 )# in m converted to km
         self.s = pyat.pyat.env.Source(source_drdc.depth)
         self.r = pyat.pyat.env.Dom(self.X, self.Z) #needs to be in km, m
