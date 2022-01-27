@@ -4,18 +4,25 @@
  # Dependencies
  This was developed in Python 3.8.8. 
  
- Michael Porter's acoustic toolbox: https://oalib-acoustics.org/ 
+ Michael Porter's acoustic toolbox: https://oalib-acoustics.org/
+ 
  Hunter Akins' PyAT*, https://github.com/org-arl/arlpy
+ 
  marcuskd's PyRAM: https://github.com/marcuskd/pyram
+ 
  Mandar Chitre's ARLPy: https://github.com/org-arl/arlpy
  
  PyPI package haversine 2.5.1
  
+ 
  All have an open license except (*), who has been emailed and granted permission for non-commercial use.
  
  PyAT was not provided with a setup.py file, and so must be directly included using sys.path.insert(1,'string_absolutepath'). stringpath must be updated in the following files:
+ 
  each environment main file
+ 
  environment.py
+ 
  comparison_setup.py
  
  
