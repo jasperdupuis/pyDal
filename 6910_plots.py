@@ -24,23 +24,15 @@ for key,list_freq in dictionary.items():
             x_krak = f.readline().split(':')[1][:-2]
             y_krak = f.readline().split(':')[1][:-2]
             x_bell = f.readline().split(':')[1][:-2]
-            y_bell = f.readline().split(':')[1][:-2]
+            y_bell = f.readline().split(':')[1][:-1]
+            
             #turn in to arrays
-            if key =='ferguson': #this is done properly, no special handling
-                x_ram = np.array(x_ram.split(','),dtype=float)
-                y_ram = np.array(y_ram.split(','),dtype=float)
-                x_krak = np.array(x_krak.split(','),dtype=float)
-                y_krak = np.array(y_krak.split(','),dtype=float)
-                x_bell = np.array(x_bell.split(','),dtype=float)
-                y_bell = np.array(y_bell.split(','),dtype=float)
-            else: #data was written with a fuckup, must cut off the last entry of y_bell.
-                x_ram = np.array(x_ram.split(','),dtype=float)
-                y_ram = np.array(y_ram.split(','),dtype=float)
-                x_krak = np.array(x_krak.split(','),dtype=float)
-                y_krak = np.array(y_krak.split(','),dtype=float)
-                x_bell = np.array(x_bell.split(','),dtype=float)
-                y_bell = np.array(y_bell.split(',')[:-1],dtype=float)
-
+            x_ram = np.array(x_ram.split(','),dtype=float)
+            y_ram = np.array(y_ram.split(','),dtype=float)
+            x_krak = np.array(x_krak.split(','),dtype=float)
+            y_krak = np.array(y_krak.split(','),dtype=float)
+            x_bell = np.array(x_bell.split(','),dtype=float)
+            y_bell = np.array(y_bell.split(','),dtype=complex)
 
             # Generate plot
             plt.plot(x_bell,-20*np.log10(np.abs(y_bell)),label='BELLHOP')
