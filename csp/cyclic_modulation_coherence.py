@@ -22,7 +22,7 @@ sys.path.insert(1, r'C:\pydrdc')
 import signatures
 
 
-def create_spectrogram(
+def create_spectrogram_cmplx(
         x,
         fs = 25600,
         window=np.hanning(1024),
@@ -87,8 +87,11 @@ def create_cyclic_modulation_coherence(x,fs,w,N_prime,L):
         s, FS, w, N_prime, L)
     """
     #Passed a given time-series x, calculate the CMC     
-    f,t,gram_cmplx = create_spectrogram(x,fs,w,N_prime,L)
+    f,t,gram_cmplx = create_spectrogram_cmplx(x,fs,w,N_prime,L)
     spectrogram = np.abs(gram_cmplx)**2
+    # apply factor that matches Antoni's processing
+    spectrogram = spectrogram * (np.sum(w) ** 2) / (fs**2)
+    
     I = spectrogram.shape[0]
     cms = np.fft.fft(spectrogram,axis=0) / I
     alphas = np.fft.fftfreq(I,t[1])
@@ -172,8 +175,8 @@ def create_sampled_CMC_and_gram(
     alphas = np.zeros(n_alphas)
     for index in range(data_samples.shape[1]):
         freqs,t,temp = \
-            create_spectrogram(data_samples[:,index],fs,w,N_prime,L)
-        results_spec[index,:,:] = np.abs(temp)[:M//2,:]
+            create_spectrogram_cmplx(data_samples[:,index],fs,w,N_prime,L)
+        results_spec[index,:,:] = np.abs(temp)[:M//2,:]**2
         
         freqs,alphas,temp = \
             create_cyclic_modulation_coherence(
@@ -197,6 +200,8 @@ def calculate_parameters(
     n_freqs = N_prime // 2  + 1 # positive plus DC at 0
     n_alphas = ( M + 1 ) // 2
     # I as defined in Antoni is retrieved from the STFT dimensions
+    # Antoni also likes unitized windows... so ok.
     w = np.hanning(N_prime)
+    w = w / (np.sqrt(np.sum(w**2))) # unit energy.
     
     return N_prime,L,M,del_alpha_achieved,n_freqs,n_alphas,w
