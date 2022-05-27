@@ -19,49 +19,21 @@ sys.path.append('..\..\csp')
 import cyclic_modulation_coherence
 import data_methods
 import util_plotting                
+import parameters as param # FS=f_s, chunk sizes, overlaps, etc live here.
 
-FS = 25600
-num_seconds_chunk = 3
-num_seconds_total = 20
-N_chunk = FS * num_seconds_chunk
-N_total = FS * num_seconds_total #largest effect on del_alpha and max alpha
-overlap_major = 0.75 # Overlap of chunks to make a single gram
-overlap_minor = 0.75 # Overlap of windows used in making a single gram, often denoted L in integer form
-del_f = 25 # a major determinant in how much cyclic resolution you get. Higher delf ==> more alpha.
 
-ICMC_MIN = 50 #index
-ICMC_MAX = 500 #index
-
-col_tdms_file = 'Onboard TDMS file'
-col_burnsi_id = 'Run ID'
-
-tdms_dir = r'C:\Users\Jasper\Desktop\MASC\raw_data\2019-Orca Ranging\AllTDMS\\'
-df_fname = r'C:/Users/Jasper/Desktop/MASC/raw_data/burnsi_files_RECONCILE_20201125.csv'
-hull_map = {'H1' : 'Port outboard', 
-                'H2' : 'Port inboard',
-                'H3' : 'Starboard outboard',
-                'H4' : 'Starboard inboard'}
-hull_sensors = list(hull_map.keys())
+hull_sensors = list(param.hull_map_2019.keys())
 run_data = dict()
 
 hull_id = hull_sensors[1] # port inboard, should be a good sensor.
-run_ids = ['DRJ1PB03AX00WB',
-'DRJ1PB05AX00WB',
-'DRJ1PB07AX00WB',
-'DRJ1PB09AX00WB',
-'DRJ1PB11AX00WB',
-'DRJ1PB13AX00WB',
-'DRJ1PB15AX00WB',
-'DRJ1PB17AX00WB']
 
-
-df = pd.read_csv(df_fname)
 #sub select just day 1 results
-df_selection = df[df[col_burnsi_id].str.contains('DRJ1')]
+df = pd.read_csv(param.df_fname)
+df_selection = df[df[param.col_burnsi_id].isin(param.run_ids)]
 
 for index,row in df_selection.iterrows():
     hull_data = dict()
-    td = nptdms.TdmsFile.read(tdms_dir + row[col_tdms_file])
+    td = nptdms.TdmsFile.read(param.tdms_dir + row[param.col_tdms_file])
     group = td.groups()[0]
     channels = group.channels()
     for c in channels:
@@ -69,24 +41,27 @@ for index,row in df_selection.iterrows():
             continue
         if c.properties['ID'] in hull_sensors:
             hull_data[c.properties['ID']] = c.data
-    run_data[row[col_burnsi_id]] = hull_data
+    run_data[row[param.col_burnsi_id]] = hull_data
     td.close()
 
-for run in run_ids:
-    x = run_data[run][hull_id][:N_total]
+for run in param.run_ids:
+    x = run_data[run][hull_id][:param.N_total]
     temp_dict = dict() #largest effect on del_alpha and max alpha
 
     N_prime,L,M,del_alpha_achieved,n_freqs,n_alphas,w = \
         cyclic_modulation_coherence.calculate_parameters(
-            N = N_chunk,
-            fs = FS,
-            del_f = del_f,
-            overlap_minor = overlap_minor)
+            N = param.N_chunk,
+            fs = param.FS,
+            del_f = param.del_f,
+            overlap_minor = param.overlap_minor)
 
-    samples,timestamps = data_methods.divide_time_series(x,overlap_major,FS,num_seconds_chunk)
+    samples,timestamps = data_methods.divide_time_series(x,
+                                                         param.overlap_major,
+                                                         param.FS,
+                                                         param.num_seconds_chunk)
     t,freqs,alphas,r_cmc,r_spec = cyclic_modulation_coherence.create_sampled_CMC_and_gram(
-                                                            samples,
-                                                             fs = FS,
+                                                             samples,
+                                                             fs = param.FS,
                                                              M = M,
                                                              w = w,
                                                              N_prime = N_prime,
@@ -104,7 +79,7 @@ for run in run_ids:
     run_data[run][hull_id + ' Mean Cyclic Modulation Coherence'] = \
         r_cmc_mean 
     run_data[run][hull_id + ' Integrated Cyclic Modulation Coherence'] = \
-        np.mean(r_cmc_integrated[:,ICMC_MIN:ICMC_MAX],axis=1)
+        np.mean(r_cmc_integrated[:,param.ICMC_MIN:param.ICMC_MAX],axis=1)
 
 
 data_label = hull_id + ' ' + 'Mean Cyclic Modulation Coherence'
@@ -116,7 +91,7 @@ shape = (2,4)
 subhead = ''
 fig = util_plotting.plot_multi_data(
         run_data,
-        run_ids, 
+        param.run_ids, 
         p_data_ref = data_label, 
         p_x_ref = x_label,
         p_y_ref = y_label,
@@ -137,7 +112,7 @@ shape = (2,4)
 subhead = ''
 fig = util_plotting.plot_multi_data(
         run_data,
-        run_ids, 
+        param.run_ids, 
         p_data_ref = data_label, 
         p_x_ref = x_label,
         p_y_ref = y_label,

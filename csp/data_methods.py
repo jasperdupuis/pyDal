@@ -63,7 +63,6 @@ def load_data_time():
         time_series_dictionary = pickle.load(fp)    
     keys = list(time_series_dictionary.keys())
     return keys,time_series_dictionary        
-
     
 def create_data(DUMP_DATA=True):
     #range data requirements
