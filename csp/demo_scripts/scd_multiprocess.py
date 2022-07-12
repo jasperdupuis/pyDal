@@ -12,23 +12,25 @@ import time
 import nptdms
 import pandas as pd
 
+import matplotlib.pyplot as plt
+import numpy as np
+    
+
 #my modules in parent directory
 sys.path.append('..\..\csp')
-import pointwise_scd_function
+import pointwise_scd_function as scd
 import data_methods
 import parameters as param
 
-tdms_dir = r'C:\Users\Jasper\Desktop\MASC\raw_data\2019-Orca Ranging\AllTDMS\\'
-df_fname = r'C:/Users/Jasper/Desktop/MASC/raw_data/burnsi_files_RECONCILE_20201125.csv'
 hull_sensors = list(param.hull_map_2019.keys()) #2019 DICTIONARY
 run_data = dict()
 
 hull_id = hull_sensors[1] # port inboard, should be a good sensor.
 
 
-df = pd.read_csv(df_fname)
+df = pd.read_csv(param.df_fname)
 #sub select just day 1 results
-df_selection = df[df[param.col_burnsi_id].str.contains('DRJ1')]
+df_selection = df[df[param.col_burnsi_id].isin(param.run_ids)]
 
 for index,row in df_selection.iterrows():
     hull_data = dict()
@@ -43,36 +45,68 @@ for index,row in df_selection.iterrows():
     run_data[row[param.col_burnsi_id]] = hull_data
     td.close()
 
-for run in param.run_ids:
-    x = run_data[run][hull_id][:param.N_total]
-    temp_dict = dict() #largest effect on del_alpha and max alpha
+#this is for a batch of runs. Missing some post-work.
+# for run in param.run_ids:
+#     x = run_data[run][hull_id][:param.N_total]
+#     samples,timestamps = data_methods.divide_time_series(x,
+#                                                          param.overlap_major,
+#                                                          param.FS,
+#                                                          param.num_seconds_chunk)
 
-    N_prime,L,M,del_alpha_achieved,n_freqs,n_alphas,w = \
-        cyclic_modulation_coherence.calculate_parameters(
-            N = param.N_chunk,
-            fs = param.FS,
-            del_f = param.del_f,
-            overlap_minor = param.overlap_minor)
+#this is for a single run, chosen with the integer argument to run_ids
+run = param.run_ids[4]
+x = run_data[run][hull_id][:param.N_total]
+samples,timestamps = data_methods.divide_time_series(x,
+                                                      param.overlap_major,
+                                                      param.FS,
+                                                      param.num_seconds_chunk)
 
-    samples,timestamps = data_methods.divide_time_series(x,
-                                                         param.overlap_major,
-                                                         param.FS,
-                                                         param.num_seconds_chunk)
     
 if __name__=='__main__':
     freeze_support()
-    #convert samples back to iterable:
-    samples_iterable = list(samples.T)
+    samples_iterable = list(samples.T)  #convert 2d array to iterable :
     start = time.time()    
-    result = calculate_scd(samples[0],t,FS,bw,freqs,alphas)
+    result = scd.calculate_scd(
+        samples_iterable[0],
+        param.FS,
+        param.bw,
+        param.scd_point_freqs,
+        param.scd_point_alphas)
     end = time.time()
     print('single unthreaded: ' + str(end - start))
     
     start = time.time()
-    with Pool(10) as p:
-        inputs = [x1,x2,x3]
-        results = p.map(calculate_scd, samples)    
+    nthreads=5
+    with Pool(nthreads) as p:
+        inputs = samples_iterable
+        results = p.map(scd.calculate_scd, inputs)  
+        p.close()
+        p.join()
     end = time.time()
-    print('three multithreaded: ' + str(end - start))
+    print(str(len(samples_iterable)) +' samples with ' \
+          + str(nthreads) +' processes: ' + str(end - start))
   
-
+    
+    # mess around with results
+    res_abs = np.abs(np.array(results))
+    plt.figure()
+    for sampl in range(res_abs.shape[0]):
+        plt.plot(
+            param.scd_point_alphas,
+            res_abs[sampl,:,10],
+            label = param.scd_point_freqs[10]
+            )   
+    
+    
+    res_mean = np.mean(res_abs,axis=0)
+    plt.figure()
+    for index in range(res_mean.shape[1]):
+        plt.plot(
+            param.scd_point_alphas,
+            res_mean[:,index],
+            label=param.scd_point_freqs[index])
+    plt.legend()
+    
+    res_mean2 = np.mean(res_mean,axis=1)
+    plt.figure()
+    plt.plot(param.scd_point_alphas,res_mean2)

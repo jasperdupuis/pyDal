@@ -38,7 +38,7 @@ message_label = 'Chunk messages'
 
 df = pd.read_csv(param.df_fname)
 #sub select just day 1 results
-df_selection = df[df[param.col_burnsi_id].str.contains('DRJ1')]
+df_selection = df[df[param.col_burnsi_id].isin(param.run_ids)]
 
 run_data = dict()
 for index,row in df_selection.iterrows():

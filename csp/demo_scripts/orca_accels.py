@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 
-Messing around with Orca-class datasets and CSP
+Messing around with Orca-class datasets and CSP, specifically CMC
+
 
 """
+DATA = True
+COMPUTE = False
+PLOT = False
 
 #core modules
 import sys
@@ -24,106 +28,109 @@ import parameters as param # FS=f_s, chunk sizes, overlaps, etc live here.
 
 hull_sensors = list(param.hull_map_2019.keys())
 run_data = dict()
-
 hull_id = hull_sensors[1] # port inboard, should be a good sensor.
 
-#sub select just day 1 results
-df = pd.read_csv(param.df_fname)
-df_selection = df[df[param.col_burnsi_id].isin(param.run_ids)]
-
-for index,row in df_selection.iterrows():
-    hull_data = dict()
-    td = nptdms.TdmsFile.read(param.tdms_dir + row[param.col_tdms_file])
-    group = td.groups()[0]
-    channels = group.channels()
-    for c in channels:
-        if len(c.properties) < 5 : #Channel unused on trial
-            continue
-        if c.properties['ID'] in hull_sensors:
-            hull_data[c.properties['ID']] = c.data
-    run_data[row[param.col_burnsi_id]] = hull_data
-    td.close()
-
-for run in param.run_ids:
-    x = run_data[run][hull_id][:param.N_total]
-    temp_dict = dict() #largest effect on del_alpha and max alpha
-
-    N_prime,L,M,del_alpha_achieved,n_freqs,n_alphas,w = \
-        cyclic_modulation_coherence.calculate_parameters(
-            N = param.N_chunk,
-            fs = param.FS,
-            del_f = param.del_f,
-            overlap_minor = param.overlap_minor)
-
-    samples,timestamps = data_methods.divide_time_series(x,
-                                                         param.overlap_major,
-                                                         param.FS,
-                                                         param.num_seconds_chunk)
-    t,freqs,alphas,r_cmc,r_spec = cyclic_modulation_coherence.create_sampled_CMC_and_gram(
-                                                             samples,
-                                                             fs = param.FS,
-                                                             M = M,
-                                                             w = w,
-                                                             N_prime = N_prime,
-                                                             L = L,
-                                                             n_alphas = n_alphas,
-                                                             n_freqs = n_freqs)
-    
-    run_data[run][hull_id + ' Spectrogram frequency (Hz)'] = freqs
-    run_data[run][hull_id + ' Cyclic frequency (Hz)'] = alphas
-    run_data[run][hull_id + ' Cyclic Modulation Coherence'] = r_cmc
-    run_data[run][hull_id + ' Spectrogram'] = r_spec
-    
-    r_cmc_mean = np.mean(r_cmc,axis=0)
-    r_cmc_integrated = np.mean(r_cmc**2,axis=0)
-    run_data[run][hull_id + ' Mean Cyclic Modulation Coherence'] = \
-        r_cmc_mean 
-    run_data[run][hull_id + ' Integrated Cyclic Modulation Coherence'] = \
-        np.mean(r_cmc_integrated[:,param.ICMC_MIN:param.ICMC_MAX],axis=1)
 
 
-data_label = hull_id + ' ' + 'Mean Cyclic Modulation Coherence'
-total_label =  data_label
-x_label = hull_id + ' ' + 'Spectrogram frequency (Hz)'
-y_label = hull_id + ' ' + 'Cyclic frequency (Hz)'
-units = '10log_10(), ref arbitrary'
-shape = (2,4)
-subhead = ''
-fig = util_plotting.plot_multi_data(
-        run_data,
-        param.run_ids, 
-        p_data_ref = data_label, 
-        p_x_ref = x_label,
-        p_y_ref = y_label,
-        p_shape = shape,
-        p_subheading = subhead, 
-        p_units = 'arbitrary', 
-        p_xlims = [0,0], 
-        p_ylims = [0,0], 
-        p_linear=True
-        )
+if __name__ == '__main__':
+    if DATA:
+        df = pd.read_csv(param.df_fname)
+        #sub select just day 1 results
+        df_selection = df[df[param.col_burnsi_id].isin(param.run_ids)]    
+        for index,row in df_selection.iterrows():
+            hull_data = dict()
+            td = nptdms.TdmsFile.read(param.tdms_dir + row[param.col_tdms_file])
+            group = td.groups()[0]
+            channels = group.channels()
+            for c in channels:
+                if len(c.properties) < 5 : #Channel unused on trial
+                    continue
+                if c.properties['ID'] in hull_sensors:
+                    hull_data[c.properties['ID']] = c.data
+            run_data[row[param.col_burnsi_id]] = hull_data
+            td.close()
+            
+    if COMPUTE:
+        for run in param.run_ids:
+            x = run_data[run][hull_id][:param.N_total]
+            temp_dict = dict() #largest effect on del_alpha and max alpha
+        
+            N_prime,L,M,del_alpha_achieved,n_freqs,n_alphas,w = \
+                cyclic_modulation_coherence.calculate_parameters(
+                    N = param.N_chunk,
+                    fs = param.FS,
+                    del_f = param.del_f,
+                    overlap_minor = param.overlap_minor)
+        
+            samples,timestamps = data_methods.divide_time_series(x,
+                                                                 param.overlap_major,
+                                                                 param.FS,
+                                                                 param.num_seconds_chunk)
+            t,freqs,alphas,r_cmc,r_spec = cyclic_modulation_coherence.create_sampled_CMC_and_gram(
+                                                                     samples,
+                                                                     fs = param.FS,
+                                                                     M = M,
+                                                                     w = w,
+                                                                     N_prime = N_prime,
+                                                                     L = L,
+                                                                     n_alphas = n_alphas,
+                                                                     n_freqs = n_freqs)
+            
+            run_data[run][hull_id + ' Spectrogram frequency (Hz)'] = freqs
+            run_data[run][hull_id + ' Cyclic frequency (Hz)'] = alphas
+            run_data[run][hull_id + ' Cyclic Modulation Coherence'] = r_cmc
+            run_data[run][hull_id + ' Spectrogram'] = r_spec
+            
+            r_cmc_mean = np.mean(r_cmc,axis=0)
+            r_cmc_integrated = np.mean(r_cmc**2,axis=0)
+            run_data[run][hull_id + ' Mean Cyclic Modulation Coherence'] = \
+                r_cmc_mean 
+            run_data[run][hull_id + ' Integrated Cyclic Modulation Coherence'] = \
+                np.mean(r_cmc_integrated[:,param.ICMC_MIN:param.ICMC_MAX],axis=1)
 
-data_label = hull_id + ' ' + 'Integrated Cyclic Modulation Coherence'
-total_label =  data_label
-x_label = hull_id + ' ' + 'Cyclic frequency (Hz)'
-y_label = 'unused 1d'
-units = '10log_10(), ref arbitrary'
-shape = (2,4)
-subhead = ''
-fig = util_plotting.plot_multi_data(
-        run_data,
-        param.run_ids, 
-        p_data_ref = data_label, 
-        p_x_ref = x_label,
-        p_y_ref = y_label,
-        p_shape = shape,
-        p_subheading = subhead, 
-        p_units = 'arbitrary', 
-        p_xlims = [0,0], 
-        p_ylims = [0,0], 
-        p_linear=True
-        )
-
+    if PLOT:
+        data_label = hull_id + ' ' + 'Mean Cyclic Modulation Coherence'
+        total_label =  data_label
+        x_label = hull_id + ' ' + 'Spectrogram frequency (Hz)'
+        y_label = hull_id + ' ' + 'Cyclic frequency (Hz)'
+        units = '10log_10(), ref arbitrary'
+        shape = (2,4)
+        subhead = ''
+        fig = util_plotting.plot_multi_data(
+                run_data,
+                param.run_ids, 
+                p_data_ref = data_label, 
+                p_x_ref = x_label,
+                p_y_ref = y_label,
+                p_shape = shape,
+                p_subheading = subhead, 
+                p_units = 'arbitrary', 
+                p_xlims = [0,0], 
+                p_ylims = [0,0], 
+                p_linear=True
+                )
+        
+        data_label = hull_id + ' ' + 'Integrated Cyclic Modulation Coherence'
+        total_label =  data_label
+        x_label = hull_id + ' ' + 'Cyclic frequency (Hz)'
+        y_label = 'unused 1d'
+        units = '10log_10(), ref arbitrary'
+        shape = (2,4)
+        subhead = ''
+        fig = util_plotting.plot_multi_data(
+                run_data,
+                param.run_ids, 
+                p_data_ref = data_label, 
+                p_x_ref = x_label,
+                p_y_ref = y_label,
+                p_shape = shape,
+                p_subheading = subhead, 
+                p_units = 'arbitrary', 
+                p_xlims = [0,0], 
+                p_ylims = [0,0], 
+                p_linear=True
+                )
+        
 
 # # ICMC test statistics
 # # Tried to implement equation 31 directly but there's an issue

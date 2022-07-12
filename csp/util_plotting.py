@@ -83,7 +83,7 @@ def plot_and_return_1D_axis(
     p_linear=False,
     p_log_x_axis=False):
     """
-    trim 2d array to match provided x and y range
+    trim array to match provided x axis range
     """
     x_min_index = np.argmax((p_x_basis - p_x_min) > 0) + 1
     x_max_index = np.argmax((p_x_basis - p_x_max) > 0) - 1
@@ -130,7 +130,7 @@ def plot_multi_data(
         where the string accessors match p_data_ref,p_x_ref,p_yref.
                   
     p_identifiers : [string]
-        Unique identifiers that exist in passed p_data_Dict        
+        Unique identifiers that exist in passed p_data_dict        
     p_data_ref : string
         String that match data key in p_data_dict        
     p_x_ref : string
@@ -172,6 +172,7 @@ def plot_multi_data(
         x_max = p_xlims[1]
         
     index = 0 #tracks which axis is being plotted.
+    #two dimensional data
     if len(p_data_dict[p_identifiers[0]][p_data_ref].shape) ==2:
         # Y limits for 2D
         y_min = p_ylims[0]
@@ -198,6 +199,7 @@ def plot_multi_data(
         cbar = f.colorbar(im, ax=ax_arr.ravel().tolist())
         cbar.ax.set_ylabel(p_units)
     
+    # one dimensional data
     if len(p_data_dict[p_identifiers[0]][p_data_ref].shape)==1:        
         for index in range(len(p_identifiers)):
             run = p_identifiers[index]

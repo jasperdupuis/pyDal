@@ -5,6 +5,8 @@ Created on Fri May 27 10:43:24 2022
 @author: Jasper
 """
 
+import numpy as np
+
 FS = 25600
 num_seconds_chunk = 3
 num_seconds_total = 20
@@ -16,6 +18,12 @@ del_f = 25 # a major determinant in how much cyclic resolution you get. Higher d
 
 ICMC_MIN = 50 #index
 ICMC_MAX = 500 #index
+
+#pointwise SCD parameters.
+scd_point_freqs = np.arange(4900,5100,10)
+scd_point_alphas = np.arange(1,130)/10
+bw = 1
+
 
 run_ids = ['DRJ1PB03AX00EB',
 'DRJ1PB05AX00EB',

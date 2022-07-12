@@ -13,6 +13,7 @@ DUMP_DATA = False
 
 import pandas as pd
 import numpy as np
+import scipy.signal as signal
 import nptdms
 import pickle
 
@@ -25,7 +26,6 @@ trial_runs_dir = r'C:\Users\Jasper\Desktop\MASC\DSP\data_dsp\\'
 trial_runs_file = trial_runs_dir + 'DSP_file_map.csv'
 df = pd.read_csv(trial_runs_file)
 
-
 keys = dict()
 keys['9 knot hydrophone measurement'] = 'DRF2PB09AA00EB' # len(str) = 14
 keys['11 knot hydrophone measurement'] = 'DRF2PB11AA00EB' # len(str) = 14
@@ -33,6 +33,22 @@ keys['7 knot accelerometer measurement June'] = '070HF00AES'
 keys['7 knot accelerometer measurement Dec (1)'] = '070ST00AEX'
 keys['7 knot accelerometer measurement Dec (2)'] = '070ST20AEX'
 
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    """
+    Not a direct equation reference, but returns
+    the band-passed x_b(t) with del_f centered at f of x(t)
+    
+    also returns the sos object for plotting, if desired:
+    # w,h = signal.sosfreqz(sos,1024*8)
+    # plt.plot(w,np.abs(h))
+    """
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
+    y = signal.sosfilt(sos, data)
+    return y,sos
 
 def divide_time_series(p_data,
                        p_overlap = 0, # in decimal 0 to 1.
