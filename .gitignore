@@ -1,3 +1,9 @@
+# Extensions to ignore
+*.pkl
+*.png
+*.pdf
+
+
 # My files to ignore
 
 py_env.env
