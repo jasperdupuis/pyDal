@@ -157,6 +157,7 @@ def plot_multi_data(
         A figure object that shows the desired data with provided labels.
 
     """
+    
     nrow = p_shape[0]
     ncol = p_shape[1]
     selectors = []

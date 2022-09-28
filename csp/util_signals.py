@@ -59,12 +59,16 @@ def random_BPSK(p_t,
     s_t =  (x_t * c_t) + (p_noise_power * n_t)    
     return s_t
 
-def amplitude_modulation_pure(p_t,
-                              p_fc=5e4,
-                              p_fm=1e4):
+def amplitude_modulation(p_t,
+                        p_fc=5e4,
+                        p_fm=1e4,
+                        p_noise_power = 0.1): #-10dB from unity signal
     m_t = np.cos(2*np.pi*p_fm*p_t) # cosine carrier  
     c_t = np.cos(2*np.pi*p_fc*p_t) # cosine carrier  
-    return m_t*c_t
+    n_t = np.random.rand(len(p_t))
+    n_t = n_t - 0.5 # remove bias for AWGN
+    s_t = (m_t*c_t) + n_t
+    return s_t
 
 
 
