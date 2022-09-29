@@ -172,22 +172,22 @@ for runID in list_run_IDs:
             file[data_type] = data
 
 
-h = h5.File(fname)
-h.keys()
-x = h['X'][:]
-y = h['Y'][:]
-r = np.sqrt(x**2 + y**2)
-t = h['Time'][:]
-n = h['North'][:]
+# h = h5.File(fname)
+# h.keys()
+# x = h['X'][:]
+# y = h['Y'][:]
+# r = np.sqrt(x**2 + y**2)
+# t = h['Time'][:]
+# n = h['North'][:]
 
 
-len(n)/FS_HYD
-len(t)/10
-t[-1] - t[0]
+# len(n)/FS_HYD
+# len(t)/10
+# t[-1] - t[0]
 
-h.close()
+# h.close()
 
-h
+# h
 
 
 
