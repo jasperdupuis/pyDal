@@ -122,6 +122,8 @@ def interpolate_x_y(p_the_run_dictionary):
 
 for runID in list_run_IDs:
     if 'DRJ' not in runID: continue #only want 2019 dynamic data.
+    fname = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
+    if not(os.path.exists(fname)): continue
     temp = dict()
     row = df[ df ['Run ID'] == runID ]
     
@@ -158,7 +160,7 @@ for runID in list_run_IDs:
     temp = align_track_and_hyd_data(temp, labelFinder) # do some truncation
     temp = interpolate_x_y(temp) # make sure the entire time base is represented
 
-    fname = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
+    
     try:
         os.remove(fname)
     except:
