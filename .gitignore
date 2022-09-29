@@ -1,5 +1,6 @@
 # Extensions to ignore
 *.pkl
+*.hdf5
 *.png
 *.pdf
 
