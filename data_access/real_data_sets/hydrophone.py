@@ -37,6 +37,7 @@ list_run_IDs = df[ df.columns[1] ].values
 # range processing information lives here. 
 range_dictionary = signatures.data.range_info.dynamic_patbay_2019.RANGE_DICTIONARY
 
+
 def align_track_and_hyd_data(p_the_run_dictionary,
                              labelFinder,
                              label_com = LABEL_COM,
@@ -100,6 +101,7 @@ def align_track_and_hyd_data(p_the_run_dictionary,
 
     return p_the_run_dictionary
 
+
 def interpolate_x_y(p_the_run_dictionary):
     # Now, must make sure there is an x,y sample for each time step.
     # Note ther eare missing time steps but we know they occured, so 
@@ -120,74 +122,112 @@ def interpolate_x_y(p_the_run_dictionary):
     p_the_run_dictionary['Time'] = t
     return p_the_run_dictionary
 
-for runID in list_run_IDs:
-    if 'DRJ' not in runID: continue #only want 2019 dynamic data.
-    fname = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
-    if not(os.path.exists(fname)): continue
-    temp = dict()
-    row = df[ df ['Run ID'] == runID ]
-    
-    fname = trial_binary_dir + row['South hydrophone raw'].values[0]
-    hyd = \
-        signatures.data.range_hydrophone.Range_Hydrophone_Canada(range_dictionary)
-    hyd.load_range_specifications(range_dictionary)
-    uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
-    temp['South'] = uncalibratedDataFloats
-    
-    fname = trial_binary_dir + row['North hydrophone raw'].values[0]
-    hyd = \
-        signatures.data.range_hydrophone.Range_Hydrophone_Canada(range_dictionary)
-    hyd.load_range_specifications(range_dictionary)
-    uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
-    temp['North'] = uncalibratedDataFloats    
-    
-    fname = trial_track_dir + row['Tracking file'].values[0]
-    track = signatures.data.range_track.Range_Track()
-    track.load_process_specifications(range_dictionary)
-    track.load_data_track(fname)
-    start_s_since_midnight, total_s = \
-        track.trim_track_data(r = range_dictionary['Track Length (m)'] / 2,
-            prop_x_string = range_dictionary['Propeller X string'],
-            prop_y_string = range_dictionary['Propeller Y string'],
-            CPA_X = range_dictionary['CPA X (m)'],
-            CPA_Y = range_dictionary['CPA Y (m)'])
-    df_temp = track.data_track_df_trimmed
+
+def generate_spectrogram_files(p_list_run_IDs,
+                               p_df = df):
+    for runID in p_list_run_IDs:
+        if 'DRJ' not in runID: continue #only want 2019 dynamic data.
+        fname = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
+        if not(os.path.exists(fname)): continue
+        temp = dict()
+        row = df[ df ['Run ID'] == runID ]
         
-    temp['X'] = df_temp[ range_dictionary['Propeller X string'] ].values
-    temp['Y'] = df_temp[ range_dictionary['Propeller Y string'] ].values
-    temp['Time'] = df_temp[ range_dictionary['Time string'] ].values
-
-    temp = align_track_and_hyd_data(temp, labelFinder) # do some truncation
-    temp = interpolate_x_y(temp) # make sure the entire time base is represented
-
-    
-    try:
-        os.remove(fname)
-    except:
-        print(runID + ' hdf5 file did not exist before generation')
+        fname = trial_binary_dir + row['South hydrophone raw'].values[0]
+        hyd = \
+            signatures.data.range_hydrophone.Range_Hydrophone_Canada(range_dictionary)
+        hyd.load_range_specifications(range_dictionary)
+        uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
+        temp['South'] = uncalibratedDataFloats
         
-    with h5.File(fname, 'w') as file:
-        for data_type,data in temp.items():
-            # note that not all variable types are supported but string and int are
-            file[data_type] = data
+        fname = trial_binary_dir + row['North hydrophone raw'].values[0]
+        hyd = \
+            signatures.data.range_hydrophone.Range_Hydrophone_Canada(range_dictionary)
+        hyd.load_range_specifications(range_dictionary)
+        uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
+        temp['North'] = uncalibratedDataFloats    
+        
+        fname = trial_track_dir + row['Tracking file'].values[0]
+        track = signatures.data.range_track.Range_Track()
+        track.load_process_specifications(range_dictionary)
+        track.load_data_track(fname)
+        start_s_since_midnight, total_s = \
+            track.trim_track_data(r = range_dictionary['Track Length (m)'] / 2,
+                prop_x_string = range_dictionary['Propeller X string'],
+                prop_y_string = range_dictionary['Propeller Y string'],
+                CPA_X = range_dictionary['CPA X (m)'],
+                CPA_Y = range_dictionary['CPA Y (m)'])
+        df_temp = track.data_track_df_trimmed
+            
+        temp['X'] = df_temp[ range_dictionary['Propeller X string'] ].values
+        temp['Y'] = df_temp[ range_dictionary['Propeller Y string'] ].values
+        temp['Time'] = df_temp[ range_dictionary['Time string'] ].values
+    
+        temp = align_track_and_hyd_data(temp, labelFinder) # do some truncation
+        temp = interpolate_x_y(temp) # make sure the entire time base is represented
+    
+        
+        try:
+            os.remove(fname)
+        except:
+            print(runID + ' hdf5 file did not exist before generation')
+            
+        with h5.File(fname, 'w') as file:
+            for data_type,data in temp.items():
+                # note that not all variable types are supported but string and int are
+                file[data_type] = data
 
 
-# h = h5.File(fname)
-# h.keys()
-# x = h['X'][:]
-# y = h['Y'][:]
-# r = np.sqrt(x**2 + y**2)
-# t = h['Time'][:]
-# n = h['North'][:]
+def get_and_interpolate_calibrations(
+    p_target_f_basis = np.arange(10,9e4,10),
+    p_fname_n = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_NORTH_H_40.CSV',
+    p_fname_s = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_SOUTH_L_40.CSV',
+    p_range_dictionary = range_dictionary,
+    p_target_bw = 10, # Hz
+    p_df_nb = 2/3
+    ):
+    # interpolate range calibration file
+    # The assumption is that variation is pretty slow in bandwidths of itnerest
+    # That is below say 15Hz. Quick plot shows this is true.
+
+    df_s = pd.read_csv(p_fname_s,skiprows=p_range_dictionary['CAL South Spectral file lines to skip'])
+    df_n = pd.read_csv(p_fname_n,skiprows=p_range_dictionary['CAL North Spectral file lines to skip'])
+    freqs = df_s[df_s.columns[0]].values
+    len_conv = int(p_target_bw / p_df_nb)
+    s = df_s[df_s.columns[1]].values # Should be AMPL (which is really dB)
+    n = df_n[df_n.columns[1]].values # SHould be AMPL (which is really dB)
+    # Valid provides results only where signals totally overlap
+    sc = np.convolve( s, np.ones(len_conv)/len_conv, mode='valid')
+    nc = np.convolve( n, np.ones(len_conv)/len_conv, mode='valid')
+    # convoluton chops a bit; append values at the end where change is not interesting.
+    delta = np.abs( len( sc ) - len( s ) ) # number of missing samples to add; always -ve so take abs
+    last = sc[ -1 ] * np.ones(delta)
+    sc = np.append(sc,last)
+    nc = np.append(nc,last)
+    sfx = interpolate.interp1d( freqs, sc ) #lazy way to do it.
+    nfx = interpolate.interp1d( freqs, nc )
+    ncal = nfx(p_target_f_basis) # these are the results
+    scal = sfx(p_target_f_basis) # these are the results
+    
+    return scal,ncal
 
 
-# len(n)/FS_HYD
-# len(t)/10
-# t[-1] - t[0]
 
-# h.close()
 
-# h
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
