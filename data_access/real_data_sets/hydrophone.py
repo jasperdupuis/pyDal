@@ -85,7 +85,7 @@ def align_track_and_hyd_data(p_the_run_dictionary,
     time_g = p_the_run_dictionary['Time'][-1] - p_the_run_dictionary['Time'][0] # Use this in case samples are missed.
         # Treat time_g for float rounding - only want the first decimal place
     time_g = int(time_g * 10) / 10
-    time_h = len(temp['North'])/fs_hyd
+    time_h = len(p_the_run_dictionary['North'])/fs_hyd
     if not(time_g == time_h):
         #So, the total hydrophone time is not equal to the total gps time elapsed
         dt = time_h - time_g

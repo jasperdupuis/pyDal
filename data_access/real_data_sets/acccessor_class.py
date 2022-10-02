@@ -20,19 +20,16 @@ class DataAccessor():
         self.runs = p_runs
         self.data_dir = p_data_directory
         self.set_freq(p_freq)
-        
-
         return self
+
 
     def get_data_set(self):
         for runID in self.runs:
-            fname = self.data_dir' + runID + r'_data_timeseries.hdf5'           
-            if not(os.path.exists(fname)): continue
-            temp = dict()
-            row = df[ df ['Run ID'] == runID ]
-            for runID in self.runs:
-            
-
+            fname = self.data_dir + runID + r'_data_timeseries.hdf5'           
+            with h5.File(fname, 'r') as file:
+                spec_s = file['South_Hydrophone']
+                spec_n = file['North_Hydrophone']
+                freq = file['']
     
   
     def get_calibrations(self,p_target_freq_basis):
