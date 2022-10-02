@@ -6,7 +6,7 @@ Created on Wed Sep 28 17:12:49 2022
 """
 
 import pandas as pd
-from scipy import interpolate
+from scipy import interpolate, signal
 import h5py as h5
 import os
 
@@ -33,6 +33,19 @@ trial_track_dir = r'C:\Users\Jasper\Desktop\MASC\raw_data\2019-Orca Ranging\Rang
 df = pd.read_csv(trial_runs_file)
 
 list_run_IDs = df[ df.columns[1] ].values
+
+OOPS = ['DRJ3PB09AX02EB',# these runs fail interpolation (needed time basis exceeds provided)
+        'DRJ3PB09AX02WB', 
+        'DRJ3PB19AX02EB', 
+        'DRJ3PB15AX00EN', # There are no track files for these runs.
+        'DRJ3PB15AX00WN',
+        'DRJ3PB17AX00EN',
+        'DRJ3PB17AX00WN',
+        'DRJ3PB05AX02EB', # These runs generate hdf5 files with 0 size, but don't fail processing somehow.
+        'DRJ2PB11AX01WB',
+        'DRJ1PB05BX00WB',
+        'DRJ1PB19AX00EB'
+        ] 
 
 # range processing information lives here. 
 range_dictionary = signatures.data.range_info.dynamic_patbay_2019.RANGE_DICTIONARY
@@ -123,60 +136,6 @@ def interpolate_x_y(p_the_run_dictionary):
     return p_the_run_dictionary
 
 
-def generate_spectrogram_files(p_list_run_IDs,
-                               p_df = df):
-    for runID in p_list_run_IDs:
-        if 'DRJ' not in runID: continue #only want 2019 dynamic data.
-        fname = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
-        if not(os.path.exists(fname)): continue
-        temp = dict()
-        row = df[ df ['Run ID'] == runID ]
-        
-        fname = trial_binary_dir + row['South hydrophone raw'].values[0]
-        hyd = \
-            signatures.data.range_hydrophone.Range_Hydrophone_Canada(range_dictionary)
-        hyd.load_range_specifications(range_dictionary)
-        uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
-        temp['South'] = uncalibratedDataFloats
-        
-        fname = trial_binary_dir + row['North hydrophone raw'].values[0]
-        hyd = \
-            signatures.data.range_hydrophone.Range_Hydrophone_Canada(range_dictionary)
-        hyd.load_range_specifications(range_dictionary)
-        uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
-        temp['North'] = uncalibratedDataFloats    
-        
-        fname = trial_track_dir + row['Tracking file'].values[0]
-        track = signatures.data.range_track.Range_Track()
-        track.load_process_specifications(range_dictionary)
-        track.load_data_track(fname)
-        start_s_since_midnight, total_s = \
-            track.trim_track_data(r = range_dictionary['Track Length (m)'] / 2,
-                prop_x_string = range_dictionary['Propeller X string'],
-                prop_y_string = range_dictionary['Propeller Y string'],
-                CPA_X = range_dictionary['CPA X (m)'],
-                CPA_Y = range_dictionary['CPA Y (m)'])
-        df_temp = track.data_track_df_trimmed
-            
-        temp['X'] = df_temp[ range_dictionary['Propeller X string'] ].values
-        temp['Y'] = df_temp[ range_dictionary['Propeller Y string'] ].values
-        temp['Time'] = df_temp[ range_dictionary['Time string'] ].values
-    
-        temp = align_track_and_hyd_data(temp, labelFinder) # do some truncation
-        temp = interpolate_x_y(temp) # make sure the entire time base is represented
-    
-        
-        try:
-            os.remove(fname)
-        except:
-            print(runID + ' hdf5 file did not exist before generation')
-            
-        with h5.File(fname, 'w') as file:
-            for data_type,data in temp.items():
-                # note that not all variable types are supported but string and int are
-                file[data_type] = data
-
-
 def get_and_interpolate_calibrations(
     p_target_f_basis = np.arange(10,9e4,10),
     p_fname_n = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_NORTH_H_40.CSV',
@@ -216,19 +175,96 @@ def get_and_interpolate_calibrations(
 
 
 
+def generate_files_from_runIDlist(p_list_run_IDs,
+                                  p_df,
+                                  p_range_dictionary = range_dictionary,
+                                  p_trial_search = 'DRJ',
+                                  p_binary_dir = trial_binary_dir,
+                                  p_track_dir = trial_track_dir,
+                                  mistakes = OOPS):
+    """
+    Can be made to work with any SRJ/DRJ/DRF/SRF etc run ID substring, 
+    uses contain so needn't necessarily be the front.
+    2019 and 2022 have different dir structures so must be provided.
+    """
+    for runID in p_list_run_IDs:
+        if 'DRJ' not in runID: 
+            continue #only want 2019 dynamic data.
+        if runID in mistakes: 
+            continue #I  made some mistakes... must reload these trk files properly later
+        fname_hdf5 = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
+        if os.path.exists(fname_hdf5): 
+            continue # If the hdf5 file already exists, no need to do it.
+        temp = dict()
+        row = p_df[ p_df ['Run ID'] == runID ]
+        
+        fname = p_binary_dir + row['South hydrophone raw'].values[0]
+        hyd = \
+            signatures.data.range_hydrophone.Range_Hydrophone_Canada(p_range_dictionary)
+        hyd.load_range_specifications(p_range_dictionary)
+        uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
+        temp['South'] = uncalibratedDataFloats
+        
+        fname = p_binary_dir + row['North hydrophone raw'].values[0]
+        hyd = \
+            signatures.data.range_hydrophone.Range_Hydrophone_Canada(p_range_dictionary)
+        hyd.load_range_specifications(p_range_dictionary)
+        uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
+        temp['North'] = uncalibratedDataFloats    
+        
+        fname = p_track_dir + row['Tracking file'].values[0]
+        track = signatures.data.range_track.Range_Track()
+        track.load_process_specifications(p_range_dictionary)
+        track.load_data_track(fname)
+        start_s_since_midnight, total_s = \
+            track.trim_track_data(r = range_dictionary['Track Length (m)'] / 2,
+                prop_x_string = range_dictionary['Propeller X string'],
+                prop_y_string = range_dictionary['Propeller Y string'],
+                CPA_X = range_dictionary['CPA X (m)'],
+                CPA_Y = range_dictionary['CPA Y (m)'])
+        df_temp = track.data_track_df_trimmed
+            
+        temp['X'] = df_temp[ range_dictionary['Propeller X string'] ].values
+        temp['Y'] = df_temp[ range_dictionary['Propeller Y string'] ].values
+        temp['Time'] = df_temp[ range_dictionary['Time string'] ].values
+    
+        temp = align_track_and_hyd_data(temp, labelFinder) # do some truncation
+        temp = interpolate_x_y(temp) # make sure the entire time base is represented
+        
+        #Now the 'grams
+        f,t,s_z = signal.stft(temp['South'],
+                              p_fs_hyd,
+                              window = win,
+                              nperseg = len_win,
+                              noverlap = 0,
+                              nfft = None,
+                              return_onesided = True)
+        f,t,n_z = signal.stft(temp['North'],
+                              p_fs_hyd,
+                              window = win,
+                              nperseg = len_win,
+                              noverlap = 0,
+                              nfft = None,
+                              return_onesided = True)
+        s_z = 2 * (np.abs(s_z)**2)/(p_fs_hyd * s2)        # PSD
+        n_z = 2 * (np.abs(n_z)**2)/(p_fs_hyd * s2)        # PSD
+        temp['South_Spectrogram'] = s_z
+        temp['North_Spectrogram'] = n_z
+        temp['Spectrogram_Time'] = t
+        temp['Frequency'] = f
+        
+        try:
+            os.remove(fname_hdf5)
+        except:
+            print(runID + ' hdf5 file did not exist before generation')
+            
+        with h5.File(fname_hdf5, 'w') as file:
+            for data_type,data in temp.items():
+                # note that not all variable types are supported but string and int are
+                file[data_type] = data
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+p_list_run_IDs = list_run_IDs
+p_fs_hyd = FS_HYD
+p_t_hyd = T_HYD
+p_fs_gps = FS_GPS
 
