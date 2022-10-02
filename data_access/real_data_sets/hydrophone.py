@@ -50,6 +50,7 @@ OOPS = ['DRJ3PB09AX02EB',# these runs fail interpolation (needed time basis exce
 # range processing information lives here. 
 range_dictionary = signatures.data.range_info.dynamic_patbay_2019.RANGE_DICTIONARY
 
+
 def align_track_and_hyd_data(p_the_run_dictionary,
                              labelFinder,
                              label_com = LABEL_COM,
@@ -113,6 +114,7 @@ def align_track_and_hyd_data(p_the_run_dictionary,
 
     return p_the_run_dictionary
 
+
 def interpolate_x_y(p_the_run_dictionary):
     # Now, must make sure there is an x,y sample for each time step.
     # Note ther eare missing time steps but we know they occured, so 
@@ -132,6 +134,46 @@ def interpolate_x_y(p_the_run_dictionary):
     p_the_run_dictionary['Y'] = y_function(t)
     p_the_run_dictionary['Time'] = t
     return p_the_run_dictionary
+
+
+def get_and_interpolate_calibrations(
+    p_target_f_basis = np.arange(10,9e4,10),
+    p_fname_n = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_NORTH_H_40.CSV',
+    p_fname_s = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_SOUTH_L_40.CSV',
+    p_range_dictionary = range_dictionary,
+    p_target_bw = 10, # Hz
+    p_df_nb = 2/3
+    ):
+    # interpolate range calibration file
+    # The assumption is that variation is pretty slow in bandwidths of itnerest
+    # That is below say 15Hz. Quick plot shows this is true.
+
+    df_s = pd.read_csv(p_fname_s,skiprows=p_range_dictionary['CAL South Spectral file lines to skip'])
+    df_n = pd.read_csv(p_fname_n,skiprows=p_range_dictionary['CAL North Spectral file lines to skip'])
+    freqs = df_s[df_s.columns[0]].values
+    len_conv = int(p_target_bw / p_df_nb)
+    s = df_s[df_s.columns[1]].values # Should be AMPL (which is really dB)
+    n = df_n[df_n.columns[1]].values # SHould be AMPL (which is really dB)
+    # Valid provides results only where signals totally overlap
+    sc = np.convolve( s, np.ones(len_conv)/len_conv, mode='valid')
+    nc = np.convolve( n, np.ones(len_conv)/len_conv, mode='valid')
+    # convoluton chops a bit; append values at the end where change is not interesting.
+    delta = np.abs( len( sc ) - len( s ) ) # number of missing samples to add; always -ve so take abs
+    last = sc[ -1 ] * np.ones(delta)
+    sc = np.append(sc,last)
+    nc = np.append(nc,last)
+    sfx = interpolate.interp1d( freqs, sc ) #lazy way to do it.
+    nfx = interpolate.interp1d( freqs, nc )
+    ncal = nfx(p_target_f_basis) # these are the results
+    scal = sfx(p_target_f_basis) # these are the results
+    
+    return scal,ncal
+
+
+
+
+
+
 
 def generate_files_from_runIDlist(p_list_run_IDs,
                                   p_df,
@@ -225,50 +267,4 @@ p_list_run_IDs = list_run_IDs
 p_fs_hyd = FS_HYD
 p_t_hyd = T_HYD
 p_fs_gps = FS_GPS
-
-len_win = int(p_fs_hyd / p_fs_gps) # window length corresponding to 0.1 s
-win = np.hanning(len_win)
-
-s1= np.sum( win )
-s2 = np.sum( win ** 2 )
-df = p_fs_hyd / len_win
-ENBW = df * s2 / ( s1 ** 2 )
-
-for runID in p_list_run_IDs:
-    if runID in OOPS: 
-            continue #I  made some mistakes... must reload these trk files properly later
-    if 'DRJ' not in runID: 
-        continue #only want 2019 dynamic data.
-    if runID in OOPS: 
-        continue #I  made some mistakes... must reload these trk files properly later
-    fname_hdf5 = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
-
-    with h5.File(fname_hdf5,'a') as file:
-        s = file['South'][:]
-        n = file['North'][:]
-        
-        f,t,s_z = signal.stft(s, 
-                              p_fs_hyd,
-                              window = win,
-                              nperseg = len_win,
-                              noverlap = 0,
-                              nfft = None,
-                              return_onesided = True)
-        f,t,n_z = signal.stft(s,
-                              p_fs_hyd,
-                              window = win,
-                              nperseg = len_win,
-                              noverlap = 0,
-                              nfft = None,
-                              return_onesided = True)
-        # STFT returns one-sided complex, not multiplied by 2.
-        s_z = 2 * (np.abs(s_z)**2)/(p_fs_hyd * s2)        # PSD
-        n_z = 2 * (np.abs(n_z)**2)/(p_fs_hyd * s2)        # PSD
-        try:
-            file['South_Spectrogram'] = s_z
-            file['North_Spectrogram'] = n_z
-        except: 
-            print (runID + ' already added.')
-
-
 
