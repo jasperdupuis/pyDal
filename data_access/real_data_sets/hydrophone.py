@@ -148,8 +148,8 @@ def get_and_interpolate_calibrations(
     # The assumption is that variation is pretty slow in bandwidths of itnerest
     # That is below say 15Hz. Quick plot shows this is true.
 
-    df_s = pd.read_csv(p_fname_s,skiprows=p_range_dictionary['CAL South Spectral file lines to skip'])
-    df_n = pd.read_csv(p_fname_n,skiprows=p_range_dictionary['CAL North Spectral file lines to skip'])
+    df_s = pd.read_csv(p_fname_s,skiprows=p_range_dictionary['AMB CAL South Spectral file lines to skip'])
+    df_n = pd.read_csv(p_fname_n,skiprows=p_range_dictionary['AMB CAL North Spectral file lines to skip'])
     freqs = df_s[df_s.columns[0]].values
     len_conv = int(p_target_bw / p_df_nb)
     s = df_s[df_s.columns[1]].values # Should be AMPL (which is really dB)
@@ -170,26 +170,23 @@ def get_and_interpolate_calibrations(
     return scal,ncal
 
 
-
-
-
-
-
-def generate_files_from_runIDlist(p_list_run_IDs,
-                                  p_df,
-                                  p_range_dictionary = range_dictionary,
-                                  p_trial_search = 'DRJ',
-                                  p_binary_dir = trial_binary_dir,
-                                  p_track_dir = trial_track_dir,
-                                  mistakes = OOPS):
+def generate_files_from_runID_list(p_list_run_IDs,
+    p_df,  
+    p_fs_hyd = FS_HYD,
+    p_fs_gps = FS_GPS,
+    p_range_dictionary = range_dictionary,
+    p_trial_search = 'DRJ',
+    p_binary_dir = trial_binary_dir,
+    p_track_dir = trial_track_dir,
+    mistakes = OOPS):
     """
     Can be made to work with any SRJ/DRJ/DRF/SRF etc run ID substring, 
     uses contain so needn't necessarily be the front.
     2019 and 2022 have different dir structures so must be provided.
     """
     for runID in p_list_run_IDs:
-        if 'DRJ' not in runID: 
-            continue #only want 2019 dynamic data.
+        if not ('J' == runID[2]): 
+            continue #only want 2019 data (J in the third character).
         if runID in mistakes: 
             continue #I  made some mistakes... must reload these trk files properly later
         fname_hdf5 = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
@@ -202,35 +199,39 @@ def generate_files_from_runIDlist(p_list_run_IDs,
         hyd = \
             signatures.data.range_hydrophone.Range_Hydrophone_Canada(p_range_dictionary)
         hyd.load_range_specifications(p_range_dictionary)
-        uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
-        temp['South'] = uncalibratedDataFloats
+        uncalibratedDataFloats_south, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
+        temp['South'] = uncalibratedDataFloats_south
         
         fname = p_binary_dir + row['North hydrophone raw'].values[0]
         hyd = \
             signatures.data.range_hydrophone.Range_Hydrophone_Canada(p_range_dictionary)
         hyd.load_range_specifications(p_range_dictionary)
-        uncalibratedDataFloats, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
-        temp['North'] = uncalibratedDataFloats    
+        uncalibratedDataFloats_north, labelFinder, message = hyd.load_data_raw_single_hydrophone(fname)
+        temp['North'] = uncalibratedDataFloats_north
         
-        fname = p_track_dir + row['Tracking file'].values[0]
-        track = signatures.data.range_track.Range_Track()
-        track.load_process_specifications(p_range_dictionary)
-        track.load_data_track(fname)
-        start_s_since_midnight, total_s = \
-            track.trim_track_data(r = range_dictionary['Track Length (m)'] / 2,
-                prop_x_string = range_dictionary['Propeller X string'],
-                prop_y_string = range_dictionary['Propeller Y string'],
-                CPA_X = range_dictionary['CPA X (m)'],
-                CPA_Y = range_dictionary['CPA Y (m)'])
-        df_temp = track.data_track_df_trimmed
+        if runID[:2] == 'DR': # track only matters for dynamic
+            fname = p_track_dir + row['Tracking file'].values[0]
+            track = signatures.data.range_track.Range_Track()
+            track.load_process_specifications(p_range_dictionary)
+            track.load_data_track(fname)
+            start_s_since_midnight, total_s = \
+                track.trim_track_data(r = range_dictionary['Track Length (m)'] / 2,
+                    prop_x_string = range_dictionary['Propeller X string'],
+                    prop_y_string = range_dictionary['Propeller Y string'],
+                    CPA_X = range_dictionary['CPA X (m)'],
+                    CPA_Y = range_dictionary['CPA Y (m)'])
+            df_temp = track.data_track_df_trimmed
+                
+            temp['X'] = df_temp[ range_dictionary['Propeller X string'] ].values
+            temp['Y'] = df_temp[ range_dictionary['Propeller Y string'] ].values
+            temp['Time'] = df_temp[ range_dictionary['Time string'] ].values
+        
+            temp = align_track_and_hyd_data(temp, labelFinder) # do some truncation
+            temp = interpolate_x_y(temp) # make sure the entire time base is represented
             
-        temp['X'] = df_temp[ range_dictionary['Propeller X string'] ].values
-        temp['Y'] = df_temp[ range_dictionary['Propeller Y string'] ].values
-        temp['Time'] = df_temp[ range_dictionary['Time string'] ].values
-    
-        temp = align_track_and_hyd_data(temp, labelFinder) # do some truncation
-        temp = interpolate_x_y(temp) # make sure the entire time base is represented
-        
+        len_win = p_fs_hyd / p_fs_gps
+        win = np.hanning(len_win)
+        s2 = np.sum(win**2)
         #Now the 'grams
         f,t,s_z = signal.stft(temp['South'],
                               p_fs_hyd,
@@ -246,8 +247,8 @@ def generate_files_from_runIDlist(p_list_run_IDs,
                               noverlap = 0,
                               nfft = None,
                               return_onesided = True)
-        s_z = 2 * (np.abs(s_z)**2)/(p_fs_hyd * s2)        # PSD
-        n_z = 2 * (np.abs(n_z)**2)/(p_fs_hyd * s2)        # PSD
+        s_z = 2 * (np.abs( s_z )**2) / ( p_fs_hyd * s2)        # PSD
+        n_z = 2 * (np.abs( n_z )**2) / ( p_fs_hyd * s2)        # PSD
         temp['South_Spectrogram'] = s_z
         temp['North_Spectrogram'] = n_z
         temp['Spectrogram_Time'] = t
@@ -263,8 +264,13 @@ def generate_files_from_runIDlist(p_list_run_IDs,
                 # note that not all variable types are supported but string and int are
                 file[data_type] = data
 
-p_list_run_IDs = list_run_IDs
-p_fs_hyd = FS_HYD
-p_t_hyd = T_HYD
-p_fs_gps = FS_GPS
 
+if __name__ == "__main__":
+    list_runs = list_run_IDs
+    # The below processes the AMBIENT data from 2019 trial.
+    # df = df
+    # fs_hyd = FS_HYD
+    # fs_gps = FS_GPS
+    # range_dict = range_dictionary
+    # trial_search = 'AMJ'
+    # generate_files_from_runID_list(list_runs,df,fs_hyd,fs_gps,range_dict,trial_search)
