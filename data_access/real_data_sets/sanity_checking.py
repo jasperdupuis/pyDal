@@ -38,7 +38,7 @@ f_df = df[df.columns[0]]
 
 #
 #
-# This worked with the range comparison paper.
+# This worked with the range comparison paper (with TL value from range)
 range_dictionary = signatures.data.range_info.dynamic_patbay_2019.RANGE_DICTIONARY
 hyd = \
     signatures.data.range_hydrophone.Range_Hydrophone_Canada(range_dictionary)

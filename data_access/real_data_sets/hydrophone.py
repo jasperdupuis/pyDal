@@ -44,7 +44,11 @@ OOPS = ['DRJ3PB09AX02EB',# these runs fail interpolation (needed time basis exce
         'DRJ3PB05AX02EB', # These runs generate hdf5 files with 0 size, but don't fail processing somehow.
         'DRJ2PB11AX01WB',
         'DRJ1PB05BX00WB',
-        'DRJ1PB19AX00EB'
+        'DRJ1PB19AX00EB',
+        'DRJ1PB05AX00EB', 'DRJ1PB05AX00WB', 'DRJ1PB07AX00EB', #Fucked these up with track overwrite.
+        'DRJ1PB07AX00WB', 'DRJ1PB09AX00EB', 'DRJ1PB09AX00WB',
+        'DRJ1PB11AX00EB', 'DRJ1PB11AX00WB', 'DRJ1PB13AX00EB',
+        'DRJ1PB13AX00WB', 'DRJ1PB15AX00EB', 'DRJ1PB15AX00WB'
         ] 
 
 # range processing information lives here. 
@@ -138,18 +142,22 @@ def interpolate_x_y(p_the_run_dictionary):
 
 def get_and_interpolate_calibrations(
     p_target_f_basis = np.arange(10,9e4,10),
-    p_fname_n = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_NORTH_H_40.CSV',
-    p_fname_s = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_SOUTH_L_40.CSV',
-    p_range_dictionary = range_dictionary,
     p_target_bw = 10, # Hz
-    p_df_nb = 2/3
+    p_df_nb = 2/3,
+    p_fname_n = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_NORTH_L_40.CSV',
+    p_fname_s = r'C:/Users/Jasper/Desktop/MASC/raw_data/2019-Orca Ranging/Range Data Amalg/TF_DYN_SOUTH_L_40.CSV',
+    p_range_dictionary = range_dictionary
     ):
     # interpolate range calibration file
     # The assumption is that variation is pretty slow in bandwidths of itnerest
     # That is below say 15Hz. Quick plot shows this is true.
 
-    df_s = pd.read_csv(p_fname_s,skiprows=p_range_dictionary['AMB CAL South Spectral file lines to skip'])
-    df_n = pd.read_csv(p_fname_n,skiprows=p_range_dictionary['AMB CAL North Spectral file lines to skip'])
+    df_s = pd.read_csv(p_fname_s,
+                       skiprows=p_range_dictionary['AMB CAL South Spectral file lines to skip'],
+                       encoding = "ISO-8859-1")
+    df_n = pd.read_csv(p_fname_n,
+                       skiprows=p_range_dictionary['AMB CAL North Spectral file lines to skip'],
+                       encoding = "ISO-8859-1")
     freqs = df_s[df_s.columns[0]].values
     len_conv = int(p_target_bw / p_df_nb)
     s = df_s[df_s.columns[1]].values # Should be AMPL (which is really dB)
@@ -173,7 +181,9 @@ def get_and_interpolate_calibrations(
 def generate_files_from_runID_list(p_list_run_IDs,
     p_df,  
     p_fs_hyd = FS_HYD,
-    p_fs_gps = FS_GPS,
+    p_window = np.hanning(204800),
+    p_overlap_n = 0,
+    p_rel_dir_name = '',
     p_range_dictionary = range_dictionary,
     p_trial_search = 'DRJ',
     p_binary_dir = trial_binary_dir,
@@ -185,11 +195,11 @@ def generate_files_from_runID_list(p_list_run_IDs,
     2019 and 2022 have different dir structures so must be provided.
     """
     for runID in p_list_run_IDs:
-        if not ('J' == runID[2]): 
-            continue #only want 2019 data (J in the third character).
+        if not (p_trial_search == runID[:3]): 
+            continue #only want provided data initiator (SRJ, DRJ, AMJ, etc).
         if runID in mistakes: 
             continue #I  made some mistakes... must reload these trk files properly later
-        fname_hdf5 = 'hdf5_timeseries/' + runID + r'_data_timeseries.hdf5'           
+        fname_hdf5 = p_rel_dir_name + r'\\'+ runID + r'_data_timeseries.hdf5'           
         if os.path.exists(fname_hdf5): 
             continue # If the hdf5 file already exists, no need to do it.
         temp = dict()
@@ -229,29 +239,31 @@ def generate_files_from_runID_list(p_list_run_IDs,
             temp = align_track_and_hyd_data(temp, labelFinder) # do some truncation
             temp = interpolate_x_y(temp) # make sure the entire time base is represented
             
-        len_win = p_fs_hyd / p_fs_gps
-        win = np.hanning(len_win)
-        s2 = np.sum(win**2)
+        s1 = np.sum(p_window)
+        s2 = np.sum(p_window**2) # completeness - not used by me. STFT applies it.
         #Now the 'grams
-        f,t,s_z = signal.stft(temp['South'],
+        f,s_t,s_z = signal.stft(temp['South'],
                               p_fs_hyd,
-                              window = win,
-                              nperseg = len_win,
-                              noverlap = 0,
+                              window = p_window,
+                              nperseg = len(p_window),
+                              noverlap = p_overlap_n,
                               nfft = None,
                               return_onesided = True)
-        f,t,n_z = signal.stft(temp['North'],
+        f,n_t,n_z = signal.stft(temp['North'],
                               p_fs_hyd,
-                              window = win,
-                              nperseg = len_win,
-                              noverlap = 0,
+                              window = p_window,
+                              nperseg = len(p_window),
+                              noverlap = p_overlap_n,
                               nfft = None,
                               return_onesided = True)
-        s_z = 2 * (np.abs( s_z )**2) / ( p_fs_hyd * s2)        # PSD
-        n_z = 2 * (np.abs( n_z )**2) / ( p_fs_hyd * s2)        # PSD
+        s_z = 2 * (np.abs( s_z )**2) / ( s2)        # PSD
+        s_z = s_z * s1                              # stft applies 1/s1
+        n_z = 2 * (np.abs( n_z )**2) / ( s2)        # PSD
+        n_z = n_z * (s1)                            # stft applies 1/s1
         temp['South_Spectrogram'] = s_z
         temp['North_Spectrogram'] = n_z
-        temp['Spectrogram_Time'] = t
+        temp['South_Spectrogram_Time'] = s_t
+        temp['North_Spectrogram_Time'] = n_t
         temp['Frequency'] = f
         
         try:
@@ -267,10 +279,17 @@ def generate_files_from_runID_list(p_list_run_IDs,
 
 if __name__ == "__main__":
     list_runs = list_run_IDs
-    # The below processes the AMBIENT data from 2019 trial.
-    # df = df
-    # fs_hyd = FS_HYD
-    # fs_gps = FS_GPS
-    # range_dict = range_dictionary
-    # trial_search = 'AMJ'
-    # generate_files_from_runID_list(list_runs,df,fs_hyd,fs_gps,range_dict,trial_search)
+    # The below processes the dynamic data from 2019 trial. (DRJ)
+    #
+    rel_dir_name = 'hdf5_timeseries_bw_01_overlap_90'
+
+    overlap = 0.9
+    overlap_n = FS_HYD * overlap
+    window = np.hanning(FS_HYD)
+    df = df
+    fs_hyd = FS_HYD
+    fs_gps = FS_GPS
+    range_dict = range_dictionary
+    trial_search = 'DRJ'
+    
+    generate_files_from_runID_list(list_runs,df,fs_hyd,window,overlap_n,rel_dir_name,range_dict,trial_search)
