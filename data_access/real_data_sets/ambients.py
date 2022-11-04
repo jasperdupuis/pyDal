@@ -14,8 +14,6 @@ import h5py as h5
 import numpy as np
 import matplotlib.pyplot as plt
 
-import hydrophone
-
 # These are for 0.1 s windows
 # INDEX_FREQ_LOW = 1
 # INDEX_FREQ_HIGH = 8999 #90k cutoff
@@ -121,6 +119,7 @@ if __name__ == '__main__':
                                         INDEX_FREQ_HIGH)
     
     # Generate the calibrations if used later.
+    import hydrophone
     cal_s, cal_n = hydrophone.get_and_interpolate_calibrations(freq_basis_trimmed)
     
     # Get all the ambients, freqs_ret is the freqs from all the STFT 

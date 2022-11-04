@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun Oct  2 13:58:55 2022
+Script to use the functions across this module
+
 
 @author: Jasper
 """
@@ -11,8 +12,12 @@ import os
 
 import matplotlib.pyplot as plt
 
-import hydrophone
-import ambients
+import data_access.real_data_sets.hydrophone as hydrophone
+import data_access.real_data_sets.ambients as ambients
+from data_access.real_data_sets.accessor_class import RealDataManager as mgr_real
+
+
+import data_analysis.statistics as mystats
 
 # These are for 0.1 s windows
 # INDEX_FREQ_LOW = 1
@@ -23,13 +28,15 @@ INDEX_FREQ_LOW = 3
 INDEX_FREQ_HIGH = 89999 #90k cutoff
 
 
-TARGET_FREQ = 2000 # The freq for analysis
+TARGET_FREQ = 1000 # The freq for analysis
+speed='07'        
+DAY = 'DRJ3'
 
 
 if __name__ == '__main__':
     # data_dir = r'C:\Users\Jasper\Documents\Repo\pyDal\pyDal\data_access\real_data_sets\hdf5_timeseries_bw_10/'
     data_dir = r'C:\Users\Jasper\Documents\Repo\pyDal\pyDal\data_access\real_data_sets\hdf5_timeseries_bw_01_overlap_90/'
-    
+    mgr = mgr_real()
     list_files = os.listdir(data_dir)
     list_runs = [x.split('_')[0] for x in list_files]
 
@@ -65,8 +72,7 @@ if __name__ == '__main__':
     
     # The below plots the spectral time series for a selected frequency.        
     plt.figure()     
-    speed='07'        
-    DAY = 'DRJ3'
+    series = dict()
     # Adds the run data:
     for runID in list_runs:
         if (DAY not in runID): continue # Day selection
@@ -79,18 +85,29 @@ if __name__ == '__main__':
                 t_n = file['North_Spectrogram_Time'][:]
                 spec_s = file['South_Spectrogram'][:]
                 t_s = file['South_Spectrogram_Time'][:]
+                x = file['X'][:]
+                y = file['Y'][:]
+                r = np.sqrt(x*x + y*y) 
+                index_cpa = np.where(r==np.min(r))[0][0]
             except:
                 print (runID + ' didn\'t work')
                 continue
-            # Keep this at this level of loop due to continue logic above.
-            # (steps will fail with above exception)
+            # Keep what follows at this loop level due to continue logic above.
+            # North hydrophone HARD CODED MAGIC VARIABLES:
             samp_n = 10*np.log10(spec_n[target_index,:])
-            # flip the westbound runs so comparing like to like in time.
-            #only looking at north for now
-            # if ('W' in runID): plt.plot(t_n-np.min(t_n),samp_n[::-1],marker='.',linestyle='None',label=runID) 
-            else: plt.plot(t_n-np.min(t_n),samp_n,marker='.',linestyle='None',label=runID)
-            # plt.plot(t_n-np.min(t_n),samp_n,marker='.',linestyle='None',label=runID)
-    plt.legend()
+            t_nn = t_n-np.min(t_n)
+            # plt.plot(t_nn,samp_n[::-1],marker='.',linestyle='None',label=runID) 
+            # plt.axvline(t_nn[index_cpa])
+            # DO flip the westbound runs for more real comparison to eastbound.
+            if ('W' in runID): 
+                samp_n = samp_n[::-1]
+                plt.plot(t_nn,samp_n,marker='.',linestyle='None',label=runID) 
+                plt.axvline(t_nn[ len( t_nn ) - index_cpa ] )
+            else: 
+                plt.plot(t_nn,samp_n,marker='.',linestyle='None',label=runID)
+                plt.axvline( t_nn [ index_cpa ] )
+            series[runID] = samp_n  #for later cross correlation
+
     # Adds the ambient data as horizontal lines.
     # Convert to arrays
     amb_nn = np.array(amb_n)
@@ -100,12 +117,15 @@ if __name__ == '__main__':
         if r[:4] == 'AMJ2': plt.axhline(s,color='b')
         if r[:4] == 'AMJ3': plt.axhline(s,color='r')
     plt.title(str(target_freq) + ' Hz with ambient received levels as horizontal lines \n 1 Hz BW, db ref V^2')
+    plt.legend()
     plt.show()        
-    
 
 
-        
-        
+
+
+
+
+
 
 
 

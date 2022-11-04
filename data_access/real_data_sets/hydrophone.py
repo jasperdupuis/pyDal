@@ -30,9 +30,9 @@ LABEL_FIN = 'FIN '
 trial_runs_file = 'C:/Users/Jasper/Desktop/MASC/raw_data/burnsi_files_RECONCILE_20201125.csv'
 trial_binary_dir = r'C:\Users\Jasper\Desktop\MASC\raw_data\2019-Orca Ranging\Range Data Amalg\ES0451_MOOSE_OTH_DYN\RAW_TIME\\'
 trial_track_dir = r'C:\Users\Jasper\Desktop\MASC\raw_data\2019-Orca Ranging\Range Data Amalg\ES0451_MOOSE_OTH_DYN\TRACKING\\'
-df = pd.read_csv(trial_runs_file)
+local_df = pd.read_csv(trial_runs_file)
 
-list_run_IDs = df[ df.columns[1] ].values
+list_run_IDs = local_df[ local_df.columns[1] ].values
 
 OOPS = ['DRJ3PB09AX02EB',# these runs fail interpolation (needed time basis exceeds provided)
         'DRJ3PB09AX02WB', 
@@ -74,7 +74,7 @@ def align_track_and_hyd_data(p_the_run_dictionary,
     even after truncation!
     In this case find the delta and split it evenly between start and end.    
     
-    input dictionary depends on having keys North, South, Time
+    input dictionary depends on having keys 'North', 'South', 'Time'
     
     labelFinder is the list returned from pydrdc.signature.loadHydData.
     """
@@ -105,7 +105,7 @@ def align_track_and_hyd_data(p_the_run_dictionary,
     time_h = len(p_the_run_dictionary['North'])/fs_hyd
     if not(time_g == time_h):
         #So, the total hydrophone time is not equal to the total gps time elapsed
-        dt = time_h - time_g
+        dt = time_h - time_g # +ve ==> hyd time exceeds gps time
         dt = np.round(dt,2)
         trunc_one_ended = int(fs_hyd * dt/2) # amount of data to chop from each end
         p_the_run_dictionary['North'] = p_the_run_dictionary['North'][ trunc_one_ended : -1 * trunc_one_ended ]
@@ -193,6 +193,8 @@ def generate_files_from_runID_list(p_list_run_IDs,
     Can be made to work with any SRJ/DRJ/DRF/SRF etc run ID substring, 
     uses contain so needn't necessarily be the front.
     2019 and 2022 have different dir structures so must be provided.
+    
+    Stores results as linear arrays!
     """
     for runID in p_list_run_IDs:
         if not (p_trial_search == runID[:3]): 
@@ -257,9 +259,9 @@ def generate_files_from_runID_list(p_list_run_IDs,
                               nfft = None,
                               return_onesided = True)
         s_z = 2 * (np.abs( s_z )**2) / ( s2)        # PSD
-        s_z = s_z * s1                              # stft applies 1/s1
+        s_z = s_z * s1                              # stft applies 1/s1, reverse this
         n_z = 2 * (np.abs( n_z )**2) / ( s2)        # PSD
-        n_z = n_z * (s1)                            # stft applies 1/s1
+        n_z = n_z * (s1)                            # stft applies 1/s1, reverse this
         temp['South_Spectrogram'] = s_z
         temp['North_Spectrogram'] = n_z
         temp['South_Spectrogram_Time'] = s_t
@@ -286,7 +288,7 @@ if __name__ == "__main__":
     overlap = 0.9
     overlap_n = FS_HYD * overlap
     window = np.hanning(FS_HYD)
-    df = df
+    df = local_df
     fs_hyd = FS_HYD
     fs_gps = FS_GPS
     range_dict = range_dictionary
