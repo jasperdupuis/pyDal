@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Oct 31 11:32:53 2022
 
-@author: Jasper
+a file for the Buckleys of code:
+    It's ugly, but it's works
+    
 """
 
 

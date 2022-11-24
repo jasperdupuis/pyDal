@@ -22,7 +22,7 @@ import pyat.pyat.env
 # PyRAM includes
 from pyram.PyRAM import PyRAM
 
-def create_basis_common(bathy, #custom class in this file
+def create_basis_common(bathy, #custom class in this module
                      rx_lat_lon_tuple,
                      tx_lat_lon_tuple,
                      BASIS_SIZE_depth,
@@ -48,11 +48,12 @@ def create_basis_common(bathy, #custom class in this file
             east_most = tx_lat_lon_tuple[1]
             west_most = rx_lat_lon_tuple[1]
     
+    
         lat_basis = np.linspace(south_most,north_most,num=BASIS_SIZE_distance)
         lon_basis = np.linspace(west_most,east_most,num=BASIS_SIZE_distance)
         z_interped = bathy.calculate_interp_bathy(lat_basis,lon_basis)
         
-        #Calculate the distance this environment spans, thi sis where meters is set
+        #Calculate the distance this environment spans, this is where meters is set
         basis_min = (min(lat_basis),min(lon_basis))
         basis_max = (max(lat_basis),max(lon_basis))
         total_distance = distance.distance(
