@@ -7,7 +7,9 @@ Created on Sun Oct  2 13:02:21 2022
 
 import numpy as np
 import h5py as h5
+import pickle
 import scipy.stats as stats
+import pandas as pd
 
 import matplotlib.pyplot as plt
 
@@ -18,11 +20,11 @@ from . import real_ambients
 class Real_Data_Manager():
     """
     This class should be able to simplify life, e.g.:
-        process raw data to hdf5 formats
-        get hydrophone time series
-        get hydrophone ambients
-        get hydrophone spectrograms
-        retreieve spectrogram data for a target frequency
+        process raw data to hdf5 formats - CHECK
+        get hydrophone time series - CHECK
+        get hydrophone ambients - CHECK
+        get hydrophone spectrograms - CHECK
+        retreieve spectrogram data for a target frequency - CHECK ?
         retrieve all ambient data for a target frequency
         facilitate basic regression analysis
         facilitate future translation of this data in to ML-ready data.
@@ -310,8 +312,65 @@ class Real_Data_Manager():
             result[runID] = temp
 
         return result
-
     
+    
+    def compute_and_pickle_summary_stats(self,fname):
+        dict_summary_stats = self.compute_summary_stats()
+        with open(fname, 'wb') as f:
+            pickle.dump(dict_summary_stats, f)
+         
+        
+    def load_and_set_pickle_summary_stats(self,fname):
+        with open(fname, 'rb') as f:
+            summary_stats = pickle.load(f)
+            self.summary_stats = summary_stats
+            return summary_stats
+        
+        
+    def plot_skew_kurtosis_SI_for_run(self,p_runID,p_side = 'North'):
+        """
+        Must have loaded the summary_stats from
+        load_and_set_pickle_summary_stats
+        # Usage:
+        fig = mgr.plot_skew_kurtosis_SI_for_run(TEST_RUN)
+        plt.show()
+
+        """
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3,figsize=(12,7))
+        fig.suptitle(p_runID + ': Skew, Kurtosis, and Scintillation Index')
+        r = self.summary_stats[p_runID]
+        
+        ax1.plot(self.freq_basis_trimmed,r[p_side + '_Skew']);
+        ax1.set_xscale('log')
+        ax1.title.set_text('Skew')
+        
+        ax2.plot(self.freq_basis_trimmed,r[p_side + '_Kurtosis']);
+        ax2.set_xscale('log')
+        ax2.title.set_text('Kurtosis')       
+        
+        ax3.plot(self.freq_basis_trimmed,r[p_side + '_Scintillation_Index']);
+        ax3.set_xscale('log')
+        ax3.title.set_text('Scintillation Index')
+        
+        return fig
+
+    def get_config_dictionary(self,p_fname):
+        with open(p_fname, 'rb') as f:
+            config_run_dictionary = pickle.load(f)
+            return 
+        
+    def set_rpm_table(self,p_fname):
+        df= pd.read_csv(p_fname,sep = ' ')    
+        hzs = df[df.columns[2]].values / 60
+        df['Corrected RPM as Hz'] = hzs
+        self.df_speed_rpm = df
+        
+    def return_nominal_rpm_as_hz(self,p_speed):
+        hz = \
+            self.df_speed_rpm [self.df_speed_rpm ['Speed(kn)']==3][self.df_speed_rpm.columns[3]].values[0]
+        return hz
+        
+
     
 if __name__ == '__main__':
     print('real_accessor_class.py was run as main file.')

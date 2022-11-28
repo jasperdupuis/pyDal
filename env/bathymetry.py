@@ -150,6 +150,23 @@ class Bathymetry():
                     np.max(self.x),
                     np.min(self.y),
                     np.max(self.y))
+        
+    def plot_bathy(self):
+        """
+        """
+        # getting the original colormap using cm.get_cmap() function
+        orig_map=plt.cm.get_cmap('viridis')
+        # reversing the original colormap using reversed() function
+        reversed_map = orig_map.reversed()
+        fig,ax = plt.subplots(1, 1,figsize=(12,7))
+        im = ax.imshow(self.z_interped,
+                extent = self.ext,
+                cmap = reversed_map,
+                origin = 'upper',
+                aspect = 'auto');
+        plt.colorbar(im)
+        return fig,ax
+
     
 
 class Bathymetry_CHS(Bathymetry):
