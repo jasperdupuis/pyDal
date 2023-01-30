@@ -8,13 +8,18 @@ class SeaBed():
     init requires bathy to be already loaded.
     """    
   
-    def __init__(self,bathy_object):
-        self.lats_selection = bathy_object.lats_selection
-        self.lons_selection = bathy_object.lons_selection
-        self.bottom_type_profile = np.ones_like(bathy_object.z_selection) 
+    def __init__(self,lats,lons,depths):
+        """
+        These are the basis vectors from rx to tx
+        not 2D arrays!
+        """
+        self.lats_selection = lats
+        self.lons_selection = lons
+        self.bottom_type_profile = np.ones_like(depths) 
 
-    def read_default_dictionary(self,
-                                fname = r'C:/Users/Jasper/Desktop/MASC/Environmental Data/seabed_numbers_from_saleh_rabah.txt'):
+    def read_default_dictionary(
+            self,
+            fname = r'C:/Users/Jasper/Desktop/MASC/Environmental Data/seabed_numbers_from_saleh_rabah.txt'):
         dictionary = dict()
         with open(fname) as f:
             lines = f.readlines()
