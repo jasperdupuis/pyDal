@@ -8,11 +8,18 @@ Created on Thu Oct 21 12:11:39 2021
 import sys
 import ast
 import numpy as np
+import pandas as pd
+from scipy import interpolate
 import matplotlib.pyplot as plt
+
+import geopy.distance as Distance
+
+import bathymetry
+import seabed
+import surface
 
 # ARL extra modules
 import arlpy.uwapm as pm
-from geopy import distance
 import haversine
 
 # PYAT extra modules
@@ -51,12 +58,15 @@ def create_basis_common(bathy, #custom class in this module
     
         lat_basis = np.linspace(south_most,north_most,num=BASIS_SIZE_distance)
         lon_basis = np.linspace(west_most,east_most,num=BASIS_SIZE_distance)
-        z_interped = bathy.calculate_interp_bathy(lat_basis,lon_basis)
+        z_interped = bathy.calculate_interp_bathy(
+            lat_basis,
+            lon_basis,
+            p_grid=False)
         
         #Calculate the distance this environment spans, this is where meters is set
         basis_min = (min(lat_basis),min(lon_basis))
         basis_max = (max(lat_basis),max(lon_basis))
-        total_distance = distance.distance(
+        total_distance = Distance.distance(
             basis_min,
             basis_max ).m
         distances = np.arange(len(z_interped))
@@ -80,23 +90,74 @@ class Environment():
     methods for specific requirements.
     """
         
-    def __init__(self):
+    def __init__(self,
+                 p_location,
+                 p_NUM_LAT = 100,
+                 p_NUM_LON = 100,
+                 p_NUM_SSP = 100,
+                 ):
         self.bathymetry = r'not set'
         self.ssp = r'not set'
         self.surface = r'not set'
         self.bottom_profile = r'not set'
+        self.LAT_N_PTS = p_NUM_LAT
+        self.LON_N_PTS = p_NUM_LON
+        self.SSP_N_PTS = p_NUM_SSP
+        self.set_location_common(p_location)
+        self.set_surface_common()
+        self.set_hyd_height() #hard coded
+        
+    def set_model_save_directory(self,p_dir):
+        self.model_target_dir = p_dir
+        
+    def set_hyd_height (self,p_height = 1):
+        self.hyd_height = p_height
         
     def set_bathymetry_common(self,p_bathymetry):
         self.bathymetry = p_bathymetry
         
-    def set_ssp_common(self,p_ssp):
-        self.ssp = p_ssp
         
-    def set_seabed_common(self,p_seabed):
-        self.bottom_profile = p_seabed
+    def set_ssp_common(self,p_ssp):
+        """
+        self.bathymetry must already be assigned before using this.
+        """
+        z = self.bathymetry.calculate_interp_bathy(
+            self.bathymetry.lat_basis_trimmed,
+            self.bathymetry.lon_basis_trimmed)
+        MAX_DEPTH = np.abs (np.min( z ) - 1)  # negative is below sea level.
+        p_ssp.set_depths(np.linspace(0, MAX_DEPTH+2, self.SSP_N_PTS))
+        p_ssp.read_profile(self.location.ssp_file)
+        self.ssp = p_ssp
+        self.set_ssp()
+        
+        
+    def set_seabed_common(
+            self            
+            ):
+        bottom_profile = seabed.SeaBed(self.bathymetry.lat_basis_trimmed,
+                                self.bathymetry.lon_basis_trimmed,
+                                self.bathymetry.z_interped)
+        bottom_profile.read_default_dictionary()
+        bottom_profile.assign_single_bottom_type(self.location.bottom_id)
+        self.bottom_profile = bottom_profile
+        self.set_seabed()
+
     
-    def set_surface_common(self,p_surface):
-        self.surface = p_surface
+    def set_surface_common(self):
+        self.surface = surface.Surface()
+
+    def set_rx_location_common(self,
+        p_latlon_tuple,
+        ):
+        self.rx_latlon = p_latlon_tuple
+            
+   
+    def set_source_common(self,p_source):
+        self.source = p_source
+   
+    def set_freqs_common (self,p_freqs):
+        self.freqs = p_freqs
+    
 
     # Functions that derived classes must implement, even if only to call
     # the _common methods, above. 
@@ -107,18 +168,28 @@ class Environment():
                                         ):
         pass
 
-    def set_ssp(self,ssp):
+    def set_ssp(self):
         pass
         
-    def set_seabed(self, p_seabed):
+    def set_seabed(self):
         pass
+
     
     def set_bathymetry(self,bathy):
         pass
     
     def set_surface(self,surface):
         pass
-   
+    
+    def set_location_common(self,p_location):
+        self.location = p_location
+    
+    def set_rx_depth_common(self,p_depth):
+        self.rx_depth = p_depth
+        
+    def calculate_exact_TLs_common(self,**kwargs):
+        pass
+
     
 class Environment_RAM(Environment):
     
@@ -127,24 +198,21 @@ class Environment_RAM(Environment):
         self.DELTA_R_RAM = dr
     
     def set_ssp(self,
-                ssp_drdc,
                 roughness = [0.5,0.5],
                 ssp_selection = 'Summer',
                 ssp_ranges = np.array([1]) # in m
                 ):   
         """
         """
-        self.set_ssp_common(ssp_drdc)
-        self.ssp_depths = ssp_drdc.depths
+        self.ssp_depths = self.ssp.depths
         self.ssp_r = ssp_ranges
-        self.ssp_c = ssp_drdc.dict[ssp_selection]
+        self.ssp_c = self.ssp.dict[ssp_selection]
         self.ssp_c = np.reshape(self.ssp_c,
                                 (len(self.ssp_c),len(self.ssp_r))
                                 )
        
         
-    def set_seabed(self,
-                   seabed_drdc):
+    def set_seabed(self):
         """
         Takes the arrays in seabed_drdc.bottom_type_profile and takes the first value
         In the future may want to account for non-uniformity.
@@ -152,18 +220,11 @@ class Environment_RAM(Environment):
         indicate that isn't an issue compared to geometry and SSP
         
         """      
-        self.set_seabed_common(seabed_drdc)
-        self.seabed_rho = seabed_drdc.bottom_type_profile['Rho'][0][0]
-        self.seabed_c = seabed_drdc.bottom_type_profile['c'][0][0]        
-        self.seabed_alpha = seabed_drdc.bottom_type_profile['alpha'][0][0]
+        self.seabed_rho = self.bottom_profile.bottom_type_profile['Rho'][0][0]
+        self.seabed_c = self.bottom_profile.bottom_type_profile['c'][0][0]        
+        self.seabed_alpha = self.bottom_profile.bottom_type_profile['alpha'][0][0]
+    
 
-    
-    def set_bathymetry(self,bathy):
-        self.set_bathymetry_common(bathy)
-    
-    def set_surface(self,surface):
-        self.set_surface_common(surface)
-    
     def create_environment_model(self,
                                  rx_lat_lon_tuple,
                                  tx_lat_lon_tuple,
@@ -247,31 +308,207 @@ class Environment_RAM(Environment):
               'c0': self._c0}
         """
         result = self.pyram_obj.run()
+        # result is a dictionary. 
+        # result['TL Line'] is the transmission loss profile at receiver depth.
         return result
+
+    def calculate_exact_TLs(self, **kwargs):
+        """
+
+        Parameters
+        ----------
+        **kwargs : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        flat_earth_approx = Approximations() # didnt define static method
+
+        for freq in self.freqs:
+            TL_RES = []
+            LAT = []
+            LON = []
+
+            for TX_SOURCE in self.source.course:
+                # South hydrophone
+                self.create_environment_model(
+                            self.rx_latlon,
+                            TX_SOURCE,
+                            TX_DEPTH = self.source.depth,
+                            FREQ_TO_RUN = freq,
+                            RX_DEPTH = self.rx_depth,
+                            BASIS_SIZE_DEPTH = kwargs['BASIS_SIZE_DEPTH'],
+                            BASIS_SIZE_DISTANCE = kwargs['BASIS_SIZE_DISTANCE'],
+                        )
+                results_RAM = self.run_model()
+                
+                results_RAM['X'],results_RAM['Y'] = \
+                    flat_earth_approx.RAM_distances_to_latlon(
+                        p_cpa = (self.location.LAT,self.location.LON), 
+                        p_rx = self.rx_latlon, 
+                        p_tx = TX_SOURCE, 
+                        p_r = results_RAM['Ranges'])
+                
+                results_RAM['TX Lat'] = TX_SOURCE[0]
+                results_RAM['TX Lon'] = TX_SOURCE[1]
+                
+                TL_RES.append(results_RAM)
+                LAT.append(TX_SOURCE[0])
+                LON.append(TX_SOURCE[1])
+                                
+            self.RAM_dictionaries_to_unstruc(TL_RES)
+                
+            df_res = pd.DataFrame(
+                data= {'X' : self.X_unstruc,
+                       'Y' : self.Y_unstruc,
+                       'TL': self.TL_unstruc,
+                       'Lats TX' : self.lats_TX_unstruc,
+                       'Lons TX' : self.lons_TX_unstruc,
+                       })
+            df_res.to_csv(
+                self.model_target_dir       \
+                    + str(freq).zfill(4)    \
+                    + '.csv')
+            
+
+    def RAM_dictionaries_to_unstruc(self,p_dictionary_list):
+        """
+        The provided dictionaries are the default RAM outputs
+        with the added X, Y, TX Lat, and TX Lon
+
+        Upon generation the unstructured data is assigned to 
+        object instance members.
+
+        Parameters
+        ----------
+        p_dictionary_list : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+        (Unstruct data sets X, Y, TL are assigned to 
+        self.X_unstruc, self.Y_unstruc, self.TL_unstruc)
+
+        """
+        
+        X_unstruc = []
+        Y_unstruc = []
+        TL_unstruc = []
+        TX_lat = []
+        TX_lon = []
+        for dictionary in p_dictionary_list:
+            X_unstruc.append(dictionary['X'])
+            Y_unstruc.append(dictionary['Y'])
+            TL_unstruc.append(dictionary['TL Line'])
+            ones = np.ones_like(dictionary['X'])
+            TX_lat.append(ones * dictionary['TX Lat'])
+            TX_lon.append(ones * dictionary['TX Lon'])
+        
+        x = [item for sublist in X_unstruc for item in sublist]
+        y = [item for sublist in Y_unstruc for item in sublist]
+        TL = [item for sublist in TL_unstruc for item in sublist]
+        lats = [item for sublist in TX_lat for item in sublist]
+        lons = [item for sublist in TX_lon for item in sublist]
+        
+        
+        self.X_unstruc = x
+        self.Y_unstruc = y
+        self.TL_unstruc = TL        
+        self.lats_TX_unstruc = lats
+        self.lons_TX_unstruc = lons
+        
+
+    def interpolate_RAM_data_obj(self,p_xlim,p_ylim):
+        """
+        Creates a TL profile over a target grid using the existing unstructured
+        data.
+        
+        p_xlim and p_ylim specify the target grid for interpolation.
+
+        This method uses class members as data sources.
+        
+        There is another method for file data sources.
+
+        Returns
+        -------
+        None.
+
+        """
+        self.xlim_interp = p_xlim
+        self.ylim_interp = p_ylim
+        
+        self.TL_interp = Environment_RAM.interpolate_RAM_data(
+            self.X_unstruc,
+            self.Y_unstruc,
+            self.TL_unstruc,
+            p_xlim,
+            p_ylim)
+
+
+    @staticmethod
+    def interpolate_RAM_data(x,y,TL,xlim,ylim,n_step=100):
+        x_basis = np.linspace(-1*xlim,xlim,n_step)
+        y_basis = np.linspace(-1*ylim,ylim,n_step)
+        x_target,y_target = np.meshgrid(x_basis,y_basis)
+    
+        source_points = ( x , y )
+        xi = ( x_target , y_target )
+        TL_interp = interpolate.griddata(
+            source_points,
+            TL,
+            xi
+            )
+        return TL_interp,xi
+        
+    def plot_TL_interpolation_with_couse(self,
+                              p_r,
+                              p_x_track,
+                              p_y_track):        
+        x_comex = []
+        y_comex = []
+        for theta in range(360):
+            theta = theta * np.pi / 180
+            x_comex.append( np.cos(theta) * p_r )
+            y_comex.append(np.sin(theta) * p_r )
+
+        ext = [-1*self.xlim_interp,
+               self.xlim_interp,
+               -1*self.ylim_interp,
+               self.ylim_interp ]
+        plt.figure();plt.imshow(
+            self.TL_interp,
+            extent = ext,
+            origin='lower',
+            aspect='auto');
+        plt.scatter(p_x_track,p_y_track,color='r',marker='.',label = 'Course')
+        plt.scatter(x_comex,y_comex,color='c',marker='x',label='COMEX/FINEX circle')
+        plt.legend()
 
     
 class Environment_PYAT(Environment):
     
     def set_ssp(self,
-                ssp_drdc,
                 roughness = [0.5,0.5],
                 ssp_selection = 'Summer'):   
         """
         """
-        self.set_ssp_common(ssp_drdc)
-        depths = [0,ssp_drdc.depths[-1]]
+        depths = [0,self.ssp.depths[-1]]
         ssp1 = pyat.pyat.env.SSPraw(
-            ssp_drdc.depths, 
-            ssp_drdc.dict[ssp_selection],
-            0*np.ones(ssp_drdc.depths.shape), # water has no shear speed, betaR
-            np.ones(ssp_drdc.depths.shape), # density of water = 1kg/L, rho
-            0*np.ones(ssp_drdc.depths.shape), # water has no attenuation, alphaI
-            0*np.ones(ssp_drdc.depths.shape)) # water has no shear attenuation, betaI
+            self.ssp.depths, 
+            self.ssp.dict[ssp_selection],
+            0*np.ones(self.ssp.depths.shape), # water has no shear speed, betaR
+            np.ones(self.ssp.depths.shape), # density of water = 1kg/L, rho
+            0*np.ones(self.ssp.depths.shape), # water has no attenuation, alphaI
+            0*np.ones(self.ssp.depths.shape)) # water has no shear attenuation, betaI
 
         raw = [ssp1]
         NMedia		=	1
         Opt			=	'CVW'	
-        N			=	[ssp_drdc.depths.size]
+        N			=	[self.ssp.depths.size]
         sigma		=	[.5,.5]	 # roughness at each layer. only effects attenuation (imag part)
         self.ssp_pyat = pyat.pyat.env.SSP(raw, depths, NMedia, Opt, N, sigma)
     
@@ -302,9 +539,6 @@ class Environment_PYAT(Environment):
         self.cInt = Empty()
         self.cInt.High = seabed_drdc.bottom_type_profile['c'][0][0]+1 #assumes 2d array passed.
         self.cInt.Low = 0 # compute automatically, not sure what this means.
-    
-    def set_bathymetry(self,bathy):
-        self.set_bathymetry_common(bathy)
     
     def set_surface(self,surface):
         self.set_surface_common(surface)
@@ -346,14 +580,6 @@ class Environment_PYAT(Environment):
     
 class Environment_ARL(Environment):
 
-    def set_ssp(self,ssp):
-        self.set_ssp_common(ssp)
-        
-    def set_seabed(self, p_seabed):
-        self.set_seabed_common(p_seabed)
-        
-    def set_bathymetry(self,bathy):
-        self.set_bathymetry_common(bathy)
         
     def set_surface(self,surface):
         self.set_surface_common(surface)
@@ -388,7 +614,6 @@ class Environment_ARL(Environment):
                 kwargs['BASIS_SIZE_DISTANCE'])
              
         self.surface.SS_0(total_distance) #sea state 0, no params other than wave height.
-        self.set_surface(self.surface)
         
         depth_array = []
         for r,z in zip(self.distances,self.z_interped):
@@ -425,7 +650,178 @@ class Environment_ARL(Environment):
         # env['tx_directionality'] 
         # env['type'] 
     
-        self.env = env
-    
+        self.env = env    
         return env
     
+    def calculate_exact_TLs(self,
+                            **kwargs):
+        count = 0
+        TL_RES = []
+        LAT = []
+        LON = []
+        for freq in self.freqs:
+            for TX_SOURCE in self.source.course:
+                env_bellhop_S = self.create_environment_model(
+                        self.rx_latlon,
+                        TX_SOURCE,
+                        FREQ_TO_RUN = freq,
+                        RX_HYD_DEPTH = self.rx_depth, 
+                        TX_DEPTH = self.source.depth, 
+                        N_BEAMS = kwargs['N_BEAMS'], 
+                        BASIS_SIZE_DEPTH = kwargs['BASIS_SIZE_DEPTH'],
+                        BASIS_SIZE_DISTANCE = kwargs['BASIS_SIZE_DISTANCE'],
+                    )
+                TL = pm.compute_transmission_loss(
+                    env_bellhop_S,
+                    mode=pm.coherent,
+                    )
+                
+                try:
+                    x_cmplx = TL.iloc(0)[0].iloc(0)[0]
+                    # TL_RES_BELL_S[index] = np.abs(x_cmplx)
+                    TL_RES.append(np.abs(x_cmplx))
+                    LAT.append(TX_SOURCE[0])
+                    LON.append(TX_SOURCE[1])
+                except:
+                    print('BELLHOP: error at range: ' +str(env_bellhop_S['rx_range']))
+                    print ('BELLHOP: This is actually lat-lon: ' + str(TX_SOURCE[0]) + ' , ' + str (TX_SOURCE[1]))
+                
+                if count % 100 == 0: 
+                    print('Still working on BELLHOP! Currently at:')
+                    print('Freq: \t' + str ( freq ) + '\t Count: \t:' + str ( count ) )
+                count = count + 1
+
+        self.LAT = LAT
+        self.LON = LON
+        self.TL = 20 * np.log10(TL_RES)
+
+    def reshape_1d_to_surface(self):
+        
+        X,Y = \
+            self.bathymetry.convert_latlon_to_xy_m(
+                self.location, 
+                np.array(self.LAT),
+                np.array(self.LON)
+                )
+                
+        tl_surf = np.reshape(self.TL,
+                             (self.LAT_N_PTS,self.LON_N_PTS)
+                             )
+        return X,Y,tl_surf
+        
+
+class Approximations():
+    
+    def __init__(self):
+        self.R = Distance.EARTH_RADIUS * 1000 #km to m
+        self.DEG_TO_RAD = np.pi / 180
+
+    def latlon_to_xy(self,p_cpa,p_latlon):
+        """
+        Convert a single latlon point to x,y, 
+        referred to the passed CPA as 0,0.
+        
+        Returns a tuple.
+        
+        Error about 0.25%
+
+        Parameters
+        ----------
+        p_cpa : TYPE
+            DESCRIPTION.
+        p_latlon : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        lat,lon = p_latlon[0],p_latlon[1]
+        lat_CPA, lon_CPA = p_cpa[0], p_cpa[1]
+        
+        x = self.R \
+            * self.DEG_TO_RAD * (lon - lon_CPA)\
+            * np.cos(np.mean(lat * self.DEG_TO_RAD ) )
+        y = self.R * self.DEG_TO_RAD * (lat - lat_CPA) 
+
+        return (x,y)
+
+
+    def xy_to_latlon(self,p_cpa,p_xy):
+        """
+        Using p_cpa as the 0,0 xy reference, convert the passed xy
+        point to lat-lon using flat earth approximation.
+
+        Error about 0.25%
+
+        Parameters
+        ----------
+        p_cpa : TYPE
+            a reference lat,lon tuple that represents 0,0 in the xy system.
+        p_xy : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        (lat,lon) tuple
+
+        """
+        
+        x,y = p_xy[0],p_xy[1]
+        lat,lon = p_cpa[0],p_cpa[1]
+        lat = ( y / self.R ) + lat 
+        lon = ( x / self.R * np.cos(lat) ) + lon
+        return (lat,lon)
+
+
+    def RAM_distances_to_latlon(self,
+                                p_cpa,#latlon
+                                p_rx, #latlon
+                                p_tx, #latlon
+                                p_r #in m
+                                ):
+        """
+        With p_cpa as 0,0, take the p_rx and p_tx and find corresponding latlon
+        points for each element of the passed p_r.
+        
+        This is done by building a new xy set representing p_r in xy, and then
+        casting those to latlon.
+        
+        Parameters
+        ----------
+        p_cpa : TYPE
+            DESCRIPTION.
+        p_rx : TYPE
+            DESCRIPTION.
+        p_tx : TYPE
+            DESCRIPTION.
+        p_r : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        try:
+            p_r = np.array(p_r) # ensure it's an array passed.
+        except:
+            print('Approximations.RAM_distances_to_latlon:\n \
+                  Range was not passed in array-castable form')
+        
+        xy_rx = self.latlon_to_xy(p_cpa,p_rx)
+        xy_tx = self.latlon_to_xy(p_cpa,p_tx)
+        
+        dx = xy_rx[0] - xy_tx[0]
+        dy = xy_rx[1] - xy_tx[1]
+        # Model as phi the angle from TX point to RX point relative to +ve x.
+        # (Adjacent staying the same, only opposite should be  changing)
+        phi = np.arctan2(dy,dx)
+        x = np.cos(phi) * p_r
+        xc = x + xy_tx[0]    
+
+        y = np.sin(phi) * p_r
+        yc = y + xy_tx[1]
+        
+        return xc,yc
