@@ -8,6 +8,7 @@ Created on Thu Oct 21 12:11:39 2021
 import sys
 import ast
 import numpy as np
+import pandas as pd
 from scipy import interpolate
 import matplotlib.pyplot as plt
 
@@ -105,6 +106,9 @@ class Environment():
         self.set_location_common(p_location)
         self.set_surface_common()
         self.set_hyd_height() #hard coded
+        
+    def set_model_save_directory(self,p_dir):
+        self.model_target_dir = p_dir
         
     def set_hyd_height (self,p_height = 1):
         self.hyd_height = p_height
@@ -321,12 +325,13 @@ class Environment_RAM(Environment):
         None.
 
         """
-        TL_RES = []
-        LAT = []
-        LON = []
         flat_earth_approx = Approximations() # didnt define static method
 
         for freq in self.freqs:
+            TL_RES = []
+            LAT = []
+            LON = []
+
             for TX_SOURCE in self.source.course:
                 # South hydrophone
                 self.create_environment_model(
@@ -354,10 +359,20 @@ class Environment_RAM(Environment):
                 LAT.append(TX_SOURCE[0])
                 LON.append(TX_SOURCE[1])
                                 
-        self.LAT = LAT
-        self.LON = LON
-        self.RESULTS = TL_RES
-
+            self.RAM_dictionaries_to_unstruc(TL_RES)
+                
+            df_res = pd.DataFrame(
+                data= {'X' : self.X_unstruc,
+                       'Y' : self.Y_unstruc,
+                       'TL': self.TL_unstruc,
+                       'Lats TX' : self.lats_TX_unstruc,
+                       'Lons TX' : self.lons_TX_unstruc,
+                       })
+            df_res.to_csv(
+                self.model_target_dir       \
+                    + str(freq).zfill(4)    \
+                    + '.csv')
+            
 
     def RAM_dictionaries_to_unstruc(self,p_dictionary_list):
         """
@@ -383,18 +398,28 @@ class Environment_RAM(Environment):
         X_unstruc = []
         Y_unstruc = []
         TL_unstruc = []
+        TX_lat = []
+        TX_lon = []
         for dictionary in p_dictionary_list:
             X_unstruc.append(dictionary['X'])
             Y_unstruc.append(dictionary['Y'])
             TL_unstruc.append(dictionary['TL Line'])
+            ones = np.ones_like(dictionary['X'])
+            TX_lat.append(ones * dictionary['TX Lat'])
+            TX_lon.append(ones * dictionary['TX Lon'])
         
         x = [item for sublist in X_unstruc for item in sublist]
         y = [item for sublist in Y_unstruc for item in sublist]
         TL = [item for sublist in TL_unstruc for item in sublist]
+        lats = [item for sublist in TX_lat for item in sublist]
+        lons = [item for sublist in TX_lon for item in sublist]
+        
         
         self.X_unstruc = x
         self.Y_unstruc = y
         self.TL_unstruc = TL        
+        self.lats_TX_unstruc = lats
+        self.lons_TX_unstruc = lons
         
 
     def interpolate_RAM_data_obj(self,p_xlim,p_ylim):
@@ -422,8 +447,8 @@ class Environment_RAM(Environment):
             self.TL_unstruc,
             p_xlim,
             p_ylim)
-        
-        
+
+
     @staticmethod
     def interpolate_RAM_data(x,y,TL,xlim,ylim,n_step=100):
         x_basis = np.linspace(-1*xlim,xlim,n_step)

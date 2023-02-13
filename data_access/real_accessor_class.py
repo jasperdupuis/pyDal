@@ -5,17 +5,11 @@ Created on Sun Oct  2 13:02:21 2022
 @author: Jasper
 """
 
-import numpy as np
-import h5py as h5
-import pickle
-import scipy.stats as stats
-import pandas as pd
 
-import matplotlib.pyplot as plt
+from _imports import h5, np, plt, stats, pickle, pd
+from _imports import  Real_Amb, Real_Hyd
 
-from . import real_hydrophone
-from . import real_ambients
-
+from _variables import GOOD_AMB
 
 class Real_Data_Manager():
     """
@@ -24,8 +18,8 @@ class Real_Data_Manager():
         get hydrophone time series - CHECK
         get hydrophone ambients - CHECK
         get hydrophone spectrograms - CHECK
-        retreieve spectrogram data for a target frequency - CHECK ?
-        retrieve all ambient data for a target frequency
+        retreieve spectrogram data for a target frequency - CHECK 
+        retrieve all ambient data for a target frequency - CHECK
         facilitate basic regression analysis
         facilitate future translation of this data in to ML-ready data.
     """
@@ -33,6 +27,10 @@ class Real_Data_Manager():
     def __init__(self,
                  p_list_runs,
                  p_data_dir):
+        
+        self.ambient_obj = Real_Amb()
+        self.hydro_obj = Real_Hyd()
+        
         self.list_runs = p_list_runs
         self.data_dir = p_data_dir
         
@@ -42,16 +40,15 @@ class Real_Data_Manager():
         self.INDEX_FREQ_LOW = 3
         self.INDEX_FREQ_HIGH = 89999 #90k cutoff
         
-        
         # These are for 0.1 s windows
         # self.INDEX_FREQ_LOW = 1
         # self.INDEX_FREQ_HIGH = 8999 #90k cutoff]
             
-        self.FS_HYD = 204800
-        self.T_HYD = 1.5 #window length in seconds
-        self.FS_GPS = 10
-        self.LABEL_COM = 'COM '
-        self.LABEL_FIN = 'FIN '
+        # self.FS_HYD = 204800
+        # self.T_HYD = 1.5 #window length in seconds
+        # self.FS_GPS = 10
+        # self.LABEL_COM = 'COM '
+        # self.LABEL_FIN = 'FIN '
         
         self.set_freq_basis()
         self.load_calibrations()
@@ -100,14 +97,17 @@ class Real_Data_Manager():
         return result
                 
     def set_freq_basis(self):
-        self.freq_basis_trimmed = real_ambients.get_freq_basis(self.list_runs[0],
-                                                    p_index_low  =  self.INDEX_FREQ_LOW,
-                                                    p_index_high = self.INDEX_FREQ_HIGH,
-                                                    p_data_dir = self.data_dir)
-
+        freq = self.ambient_obj.get_freq_basis(
+            self.list_runs[0],
+            p_index_low  =  self.INDEX_FREQ_LOW,
+            p_index_high = self.INDEX_FREQ_HIGH,
+            p_data_dir = self.data_dir)
+        
+        self.freq_basis_trimmed = freq
+    
 
     def load_calibrations(self):
-            s,n = real_hydrophone.get_and_interpolate_calibrations(self.freq_basis_trimmed)
+            s,n = self.hydro_obj.get_and_interpolate_calibrations(self.freq_basis_trimmed)
             self.cal_s  = s
             self.cal_n = n
 
@@ -122,10 +122,11 @@ class Real_Data_Manager():
        fname = p_data_dir + '\\' + p_runID + r'_data_timeseries.hdf5'           
        with h5.File(fname, 'r') as file:
            try:
-               result['North_Spectrogram'] = file['North_Spectrogram'][:]
-               result['North_Spectrogram_Time']= file['North_Spectrogram_Time'][:]
-               result['South_Spectrogram']= file['South_Spectrogram'][:]
-               result['South_Spectrogram_Time']= file['South_Spectrogram_Time'][:]
+               result['North_Spectrogram']      = file['North_Spectrogram'][:]
+               result['North_Spectrogram_Time'] = file['North_Spectrogram_Time'][:]
+               result['South_Spectrogram']      = file['South_Spectrogram'][:]
+               result['South_Spectrogram_Time'] = file['South_Spectrogram_Time'][:]
+               result['Frequency']              = file['Frequency'][:]
                if 'AM' not in p_runID :
                    result['X'] = file['X'][:]
                    result['Y'] = file['Y'][:]
@@ -141,11 +142,11 @@ class Real_Data_Manager():
         """
         Get all the ambients, freqs_ret is the freqs from all the STFT 
         ( for checking if wanted. )
-        FOR NOW, set cal_S and cal_n to be zero here to easily compare
+        FOR NOW, set cal_s and cal_n to be zero here to easily compare
         """
         amb_s,amb_n,runs_used,freqs_ret = \
-            real_ambients.return_ambient_results( 
-                                            real_ambients.GOOD, #Not all ambient runs are good.
+            self.ambient_obj.return_ambient_results( 
+                                            GOOD_AMB, #Not all ambient runs are good. # NOT HANDLED WELL RN
                                             np.zeros_like(self.cal_n),
                                             np.zeros_like(self.cal_s),
                                             self.INDEX_FREQ_LOW,
@@ -208,6 +209,8 @@ class Real_Data_Manager():
         
     
     def scatter_selected_data_single_f(self,
+                                       p_runs,
+                                       p_type, #Ambient AM or dynamic DR
                                        p_target_freq,
                                        p_day = 'DRJ3',
                                        p_speed = '07',
@@ -223,30 +226,43 @@ class Real_Data_Manager():
         # The below plots the spectral time series for a selected frequency.        
         fig,ax = plt.subplots()     
         # Adds the run data:
-        for runID in self.list_runs:
-            if (p_day not in runID): continue # Day selection
-            if (p_speed not in runID): continue # not in selection
-            if 'frequency' in runID: continue # don't want this run.
+        for runID in p_runs:
+            if (p_day not in runID): continue # this run is not the right day
+            if (p_speed not in runID): continue # this run is not the right speed
+            if 'frequency' in runID: continue # this is not a run.
+            if 'summary' in runID: continue # this is not a run
             
             runData = self.load_target_spectrogram_data(runID,  # Returns linear values
                                                        self.data_dir)
             samp_n,t_n,samp_s,t_s = self.extract_target_frequency(runData,
                                                                  target_f_index)
             
-            x = runData['X'][:]
-            y = runData['Y'][:]
-            r = np.sqrt(x*x + y*y) 
-            index_cpa = np.where(r==np.min(r))[0][0]
+            if p_type == 'DR' :
+                #Ambient wont have this data, treat in next if
+                x = runData['X'][:]
+                y = runData['Y'][:]
+                r = np.sqrt(x*x + y*y) 
+                index_cpa = np.where(r==np.min(r))[0][0]
+                
+                if p_hyd == 'NORTH':
+                    self.scatter_time_series(t_n, samp_n, ax, label=runID)
+                    t_n = t_n-np.min(t_n)
+                    plt.axvline( t_n [ index_cpa ] )
             
-            if p_hyd == 'NORTH':
-                self.scatter_time_series(t_n, samp_n, ax, label=runID)
-                t_n = t_n-np.min(t_n)
-                plt.axvline( t_n [ index_cpa ] )
-        
-            if p_hyd == 'SOUTH':
-                self.scatter_time_series(t_s, samp_s, ax, label=runID)
-                t_s = t_s-np.min(t_s)
-                plt.axvline( t_s [ index_cpa ] )
+                if p_hyd == 'SOUTH':
+                    self.scatter_time_series(t_s, samp_s, ax, label=runID)
+                    t_s = t_s-np.min(t_s)
+                    plt.axvline( t_s [ index_cpa ] )
+                    
+            if p_type =='AM' :
+                if p_hyd == 'NORTH':
+                    self.scatter_time_series(t_n, samp_n, ax, label=runID)
+                    t_n = t_n-np.min(t_n)
+                    
+                if p_hyd == 'SOUTH':
+                    self.scatter_time_series(t_s, samp_s, ax, label=runID)
+                    t_s = t_s-np.min(t_s)
+                    
         
 
         self.plot_ambient_level_single_f(ax)
@@ -261,12 +277,15 @@ class Real_Data_Manager():
         """
         result = dict()
         for runID in self.list_runs:
+            if 'summary' in runID: continue # not valid.
             temp = dict()
             if 'frequency' in runID: continue # don't want this run.
             runData = self.load_target_spectrogram_data(runID,  # Returns linear values
                                                        self.data_dir)
-            spec_n = runData['South_Spectrogram'][self.INDEX_FREQ_LOW : self.INDEX_FREQ_HIGH , : ]
-            spec_s = runData['North_Spectrogram'][self.INDEX_FREQ_LOW : self.INDEX_FREQ_HIGH , : ]
+            spec_n = \
+                runData['South_Spectrogram'][self.INDEX_FREQ_LOW : self.INDEX_FREQ_HIGH , : ]
+            spec_s = \
+                runData['North_Spectrogram'][self.INDEX_FREQ_LOW : self.INDEX_FREQ_HIGH , : ]
             
             
             # Compute mean SOG if dynamic run
@@ -296,6 +315,9 @@ class Real_Data_Manager():
             s_s = stats.skew(spec_s,axis=1)
             k_s = stats.kurtosis(spec_s,axis=1)
             si_s = ( std_s ** 2 ) / (m_s ** 2)
+            
+            temp['Frequency'] = \
+                runData['Frequency'][self.INDEX_FREQ_LOW : self.INDEX_FREQ_HIGH ]
             
             temp['North_Mean'] = m_n            
             temp['North_STD'] = std_n
@@ -357,7 +379,7 @@ class Real_Data_Manager():
     def get_config_dictionary(self,p_fname):
         with open(p_fname, 'rb') as f:
             config_run_dictionary = pickle.load(f)
-            return 
+            return config_run_dictionary
         
     def set_rpm_table(self,p_fname):
         df= pd.read_csv(p_fname,sep = ' ')    
@@ -377,8 +399,8 @@ if __name__ == '__main__':
     # If needed to recompute and store:
     # summary_stats = mgr.compute_summary_stats()
     # fname = r'summary_stats_dict.pkl'
-    # # with open( fname, 'wb' ) as file:
-    # #     pickle.dump( summary_stats, file )
+    # with open( fname, 'wb' ) as file:
+    #     pickle.dump( summary_stats, file )
 
     # Otherwise, just load from file:
     # with open(fname, 'rb') as file:
