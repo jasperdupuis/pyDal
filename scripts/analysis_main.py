@@ -90,12 +90,14 @@ runs = mgr.get_run_selection(
 
 
 # A scatter plot of multiple runs with given processing (data dir sets this)
-mgr.scatter_selected_data_single_f(runs,
+fix,ax = mgr.scatter_selected_data_single_f(runs,
                                    _variables.TYPE,
                                    _variables.TARGET_FREQ,
                                     _variables.DAY,
                                     _variables.SPEED,
-                                    _variables.HYDROPHONE) #Which hydrophone in use.
+                                    _variables.HYDROPHONE,
+                                    p_decibel_bool = True,
+                                    p_ambients_bool = False) #Which hydrophone in use.
 
 mgr.set_rpm_table(_directories_and_files.FNAME_SPEED_RPM)
 freq_shaft = mgr.return_nominal_rpm_as_hz(_variables.SPEED)

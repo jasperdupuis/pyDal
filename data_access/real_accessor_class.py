@@ -7,9 +7,15 @@ Created on Sun Oct  2 13:02:21 2022
 
 
 from _imports import h5, np, plt, stats, pickle, pd
-from _imports import  Real_Amb, Real_Hyd
+from _imports import  Real_Amb, Real_Hyd, os, Location
 
-from _variables import GOOD_AMB
+from _variables import GOOD_AMB, LOCATION
+
+import _variables
+
+import _directories_and_files
+
+TYPE = 'linear'
 
 class Real_Data_Manager():
     """
@@ -37,12 +43,12 @@ class Real_Data_Manager():
         #Hard coded variables below, probably dont need to touch them.
         
         # These are for  1.0s windows
-        self.INDEX_FREQ_LOW = 3
-        self.INDEX_FREQ_HIGH = 89999 #90k cutoff
+        # self.INDEX_FREQ_LOW = 3
+        # self.INDEX_FREQ_HIGH = 89999 #90k cutoff
         
         # These are for 0.1 s windows
-        # self.INDEX_FREQ_LOW = 1
-        # self.INDEX_FREQ_HIGH = 8999 #90k cutoff]
+        self.INDEX_FREQ_LOW = 1
+        self.INDEX_FREQ_HIGH = 8999 #90k cutoff]
             
         # self.FS_HYD = 204800
         # self.T_HYD = 1.5 #window length in seconds
@@ -157,12 +163,40 @@ class Real_Data_Manager():
         self.amb_runs = runs_used
 
 
-    
+    def plot_all_ambients(self,p_f_high=1000):
+        index_high = np.where(self.freq_basis_trimmed > p_f_high)[0][0]
+        fig_n,ax_n = plt.subplots(nrows=1,ncols=1,figsize=(12,8))
+        for r,a in zip(self.amb_runs,self.amb_n):
+            ax_n.plot(
+                self.freq_basis_trimmed[:index_high],
+                a[:index_high],
+                label = r)
+        ax_n.set_xscale('log')
+        fig_n.supylabel('dB ref 1 V^2 / Hz')
+        fig_n.supxlabel('Frequency (Hz)')
+        fig_n.suptitle('North Hydrophone Ambients')
+        fig_n.legend()
+
+        fig_s,ax_s = plt.subplots(nrows=1,ncols=1,figsize=(12,8))
+        for r,a in zip(self.amb_runs,self.amb_s):
+            ax_s.plot(
+                self.freq_basis_trimmed[:index_high],
+                a[:index_high],
+                label = r)
+        ax_s.set_xscale('log')
+        fig_s.supylabel('dB ref 1 V^2 / Hz')
+        fig_s.supxlabel('Frequency (Hz)')
+        fig_s.suptitle('South Hydrophone Ambients')
+        fig_s.legend()
+
+        return fig_n, ax_n, fig_s, ax_s
+                
+
     def extract_target_frequency(self,
                                  p_run_data_dict,
                                  p_target_index):
-        samp_n = 10*np.log10(p_run_data_dict['North_Spectrogram'][p_target_index,:])
-        samp_s = 10*np.log10(p_run_data_dict['South_Spectrogram'][p_target_index,:])
+        samp_n = p_run_data_dict['North_Spectrogram'][p_target_index,:]
+        samp_s = p_run_data_dict['South_Spectrogram'][p_target_index,:]
         t_n = p_run_data_dict['North_Spectrogram_Time'] \
             - np.min(p_run_data_dict['North_Spectrogram_Time'])
         t_s = p_run_data_dict['South_Spectrogram_Time'] \
@@ -214,7 +248,9 @@ class Real_Data_Manager():
                                        p_target_freq,
                                        p_day = 'DRJ3',
                                        p_speed = '07',
-                                       p_hyd = 'NORTH'):
+                                       p_hyd = 'NORTH',
+                                       p_decibel_bool = True,
+                                       p_ambients_bool =True):
         """
         Loops over ALL available hdf5 data looking for runs that meet passed 
         query criteria and plots a scatter at the target freq
@@ -236,7 +272,10 @@ class Real_Data_Manager():
                                                        self.data_dir)
             samp_n,t_n,samp_s,t_s = self.extract_target_frequency(runData,
                                                                  target_f_index)
-            
+            if p_decibel_bool:
+                samp_n = 10*np.log10(samp_n)
+                samp_s = 10*np.log10(samp_s)
+                
             if p_type == 'DR' :
                 #Ambient wont have this data, treat in next if
                 x = runData['X'][:]
@@ -245,35 +284,36 @@ class Real_Data_Manager():
                 index_cpa = np.where(r==np.min(r))[0][0]
                 
                 if p_hyd == 'NORTH':
-                    self.scatter_time_series(t_n, samp_n, ax, label=runID)
+                    ax = self.scatter_time_series(t_n, samp_n, ax, label=runID)
                     t_n = t_n-np.min(t_n)
                     plt.axvline( t_n [ index_cpa ] )
             
                 if p_hyd == 'SOUTH':
-                    self.scatter_time_series(t_s, samp_s, ax, label=runID)
+                    ax = self.scatter_time_series(t_s, samp_s, ax, label=runID)
                     t_s = t_s-np.min(t_s)
                     plt.axvline( t_s [ index_cpa ] )
                     
             if p_type =='AM' :
                 if p_hyd == 'NORTH':
-                    self.scatter_time_series(t_n, samp_n, ax, label=runID)
+                    ax = self.scatter_time_series(t_n, samp_n, ax, label=runID)
                     t_n = t_n-np.min(t_n)
                     
                 if p_hyd == 'SOUTH':
-                    self.scatter_time_series(t_s, samp_s, ax, label=runID)
+                    ax = self.scatter_time_series(t_s, samp_s, ax, label=runID)
                     t_s = t_s-np.min(t_s)
                     
-        
-
-        self.plot_ambient_level_single_f(ax)
+        if p_ambients_bool:
+            ax = self.plot_ambient_level_single_f(ax)
         plt.title(str(target_freq) + ' Hz with ambient received levels as horizontal lines \n 1 Hz BW, db ref V^2')
         plt.legend()
-        plt.show()         
+        return fig,ax
 
 
-    def compute_summary_stats(self):
+    def compute_summary_stats(self,p_type=TYPE):
         """
         Compute mean, std, SI, S, K for each frequency bin and run.
+        
+        pass p_type = 'decibel' for 10log10(value)
         """
         result = dict()
         for runID in self.list_runs:
@@ -287,7 +327,10 @@ class Real_Data_Manager():
             spec_s = \
                 runData['North_Spectrogram'][self.INDEX_FREQ_LOW : self.INDEX_FREQ_HIGH , : ]
             
-            
+            if p_type == 'decibel':
+                spec_n = 10*np.log10(spec_n)
+                spec_s = 10*np.log10(spec_s)
+                
             # Compute mean SOG if dynamic run
             if 'AM' not in runID:
                 x = runData['X'][:]
@@ -336,8 +379,11 @@ class Real_Data_Manager():
         return result
     
     
-    def compute_and_pickle_summary_stats(self,fname):
-        dict_summary_stats = self.compute_summary_stats()
+    def compute_and_pickle_summary_stats(
+            self,
+            fname,
+            p_type = 'linear'):
+        dict_summary_stats = self.compute_summary_stats(p_type)
         with open(fname, 'wb') as f:
             pickle.dump(dict_summary_stats, f)
          
@@ -391,17 +437,58 @@ class Real_Data_Manager():
         hz = \
             self.df_speed_rpm [self.df_speed_rpm ['Speed(kn)']==3][self.df_speed_rpm.columns[3]].values[0]
         return hz
-        
 
     
+    @staticmethod
+    def get_manager_and_runs(
+            p_dir_spectrograms = _directories_and_files.DIR_SPECTROGRAM,
+            p_fname_summary = _directories_and_files.SUMMARY_FNAME,
+            p_fname_trial_map = _directories_and_files.FNAME_CONFIG_TRIAL_MAP):
+    
+        list_files = os.listdir(p_dir_spectrograms)
+        list_runs = [x.split('_')[0] for x in list_files]
+        mgr = Real_Data_Manager(list_runs,p_dir_spectrograms)    
+    
+        summary_stats = \
+            mgr.load_and_set_pickle_summary_stats(
+            p_dir_spectrograms + p_fname_summary )
+    
+        config_dictionary = \
+            mgr.get_config_dictionary(
+                p_fname_trial_map )
+            
+        #Selects based on run ID criteria
+        runs = mgr.get_run_selection(
+                                    p_type = _variables.TYPE,
+                                    p_mth = _variables.MTH,
+                                    p_machine = _variables.STATE,
+                                    p_speed = _variables.SPEED,
+                                    p_head = _variables.HEADING)
+            
+        return mgr, runs, config_dictionary
+
+
+
 if __name__ == '__main__':
     print('real_accessor_class.py was run as main file.')
-    # If needed to recompute and store:
+    # # If needed to recompute and store:
+    # import sys,pickle
+    # sys.path.append('C:\\Users\\Jasper\\Documents\\Repo\\pyDal\\pyDal')
+
+    # from _imports import Location, os
+    # from _directories_and_files import DIR_SPECTROGRAM
+    # from _variables import LOCATION    
+
+    # the_location = Location(LOCATION)
+    # list_files = os.listdir(DIR_SPECTROGRAM)
+    # list_runs = [x.split('_')[0] for x in list_files]
+
+    # mgr = Real_Data_Manager(list_runs, DIR_SPECTROGRAM)
     # summary_stats = mgr.compute_summary_stats()
-    # fname = r'summary_stats_dict.pkl'
+    # fname = DIR_SPECTROGRAM + r'summary_stats_dict_decibel.pkl'
     # with open( fname, 'wb' ) as file:
     #     pickle.dump( summary_stats, file )
 
-    # Otherwise, just load from file:
+    # # # Otherwise, just load from file:
     # with open(fname, 'rb') as file:
     #     summary_stats = pickle.load(file)   

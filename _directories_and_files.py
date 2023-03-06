@@ -13,10 +13,15 @@ from directories_and_files import DIR_SPETROGRAM, SUMMARY_FNAME
 DIRECTORIES
 
 """
-# Data directory of interest, note there are a few different ways of making spectrograms
+# # Data directory of interest, note there are a few different ways of making spectrograms
+# # The 90% overlap with 1s windows ==> 1Hz resolution, 10 points per s
+# DIR_SPECTROGRAM = \
+#     r'C:\Users\Jasper\Documents\Repo\pyDal\pyDal\data_access\real_data_sets\hdf5_timeseries_bw_01_overlap_90\\'
+# The 0 overlap and 0.1s windows ==> 10Hz resolution, 1 point per s
 DIR_SPECTROGRAM = \
-    r'C:\Users\Jasper\Documents\Repo\pyDal\pyDal\data_access\real_data_sets\hdf5_timeseries_bw_01_overlap_90\\'
-0
+    r'C:\Users\Jasper\Documents\Repo\pyDal\pyDal\data_access\real_data_sets\hdf5_timeseries_bw_10\\'
+
+
 DIR_BINARY_HYDROPHONE = \
     r'C:\Users\Jasper\Desktop\MASC\raw_data\2019-Orca Ranging\Range Data Amalg\ES0451_MOOSE_OTH_DYN\RAW_TIME\\'
 

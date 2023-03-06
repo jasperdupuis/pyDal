@@ -9,6 +9,8 @@ instead of managing globals across multiple files
 
 from importlib import util
 
+from _imports import np
+
 """
 
 TRIAL VARIABLES
@@ -33,23 +35,23 @@ LOCATION = 'Patricia Bay'
 RUN VARIABLES
 
 """
-
+FREQS = 10 + np.arange(190)
 TARGET_FREQ = 73
-NUM_DAY = '2' #all results will filter on trial day number.
+NUM_DAY = '3' #all results will filter on trial day number.
 
 # An ambient run from July 2019
-TYPE = 'AM'
-MTH = 'J'
-STATE = 'X'
-SPEED='00'        
-HEADING = 'X' #X means both
+# TYPE = 'AM'
+# MTH = 'J'
+# STATE = 'X'
+# SPEED='00'        
+# HEADING = 'X' #X means both
 
 # A set of dynamic run parameters from July 2019.
-# TYPE = 'DR'
-# MTH = 'J'
-# STATE = 'A'
-# SPEED='05'        
-# HEADING = 'X' #X means both
+TYPE = 'DR'
+MTH = 'J'
+STATE = 'A'
+SPEED='05'        
+HEADING = 'X' #X means both
 
 DAY = TYPE + MTH + NUM_DAY #AMJ3, DRF1, etc.
 
